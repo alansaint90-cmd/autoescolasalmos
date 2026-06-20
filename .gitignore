@@ -1,0 +1,9 @@
+.next
+node_modules
+.env
+.env*.local
+src/lib/db/migrations/meta/_journal.json
+tsconfig.tsbuildinfo
+backups/
+.agents/
+.codex/

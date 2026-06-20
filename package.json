@@ -1,0 +1,45 @@
+{
+  "name": "auto-pro-ia-salmos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed:users": "node scripts/seed-users.mjs",
+    "db:seed:dashboard": "node scripts/seed-dashboard-dates.mjs",
+    "db:cleanup:fake-leads": "node scripts/cleanup-fake-leads.mjs",
+    "db:reset:conversations": "node scripts/reset-conversations.mjs",
+    "db:backup": "node scripts/backup-postgres.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@supabase/supabase-js": "latest",
+    "ai": "latest",
+    "drizzle-orm": "latest",
+    "ioredis": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
+    "postgres": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "drizzle-kit": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "@tailwindcss/postcss": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}
