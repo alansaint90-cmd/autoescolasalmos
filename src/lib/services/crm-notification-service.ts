@@ -43,6 +43,8 @@ async function sendInternalWhatsAppNotification(input: {
   body: string;
   payload?: Record<string, unknown>;
 }) {
+  if (!env.INTERNAL_WHATSAPP_NOTIFICATIONS_ENABLED) return;
+
   const recipients = getNotificationRecipients();
   if (recipients.length === 0) return;
 
