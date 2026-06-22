@@ -58,7 +58,7 @@ export function normalizeEvolutionMessage(input: EvolutionWebhookInput): Normali
     return null;
   }
 
-  const extracted = extractMessage(input.data.message);
+  const extracted = extractMessage(input.data.message, input);
   const text = extracted.text;
   const marketing = extractMarketingAttribution(input, text);
 
@@ -80,8 +80,16 @@ export function normalizeEvolutionMessage(input: EvolutionWebhookInput): Normali
   };
 }
 
-function extractMessage(message: Record<string, unknown> | undefined): Pick<NormalizedInboundMessage, "text" | "media"> {
-  if (!message) return { text: "" };
+function extractMessage(message: unknown, input: EvolutionWebhookInput): Pick<NormalizedInboundMessage, "text" | "media"> {
+  if (typeof message === "string") return { text: message };
+  if (!isRecord(message)) {
+    const fallbackText = getString(input.data.text)
+      ?? getString(input.data.body)
+      ?? getString(input.data.caption)
+      ?? getString((input as unknown as Record<string, unknown>).message);
+
+    return { text: fallbackText ?? "" };
+  }
 
   const unwrapped = unwrapMessage(message);
 
