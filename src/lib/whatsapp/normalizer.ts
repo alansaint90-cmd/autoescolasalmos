@@ -295,11 +295,17 @@ function detectAdTextSignals(text: string) {
 
 function isPaidTrafficEntryText(normalizedText: string) {
   const acceptedMessages = [
+    "tenho interesse gostaria de mais informacoes",
     "tenho interesse gostaria de mais informacoes por favor",
+    "ola tenho interesse gostaria de mais informacoes",
     "ola tenho interesse gostaria de mais informacoes por favor",
+    "tenho interesse e gostaria de mais informacoes",
     "tenho interesse e gostaria de mais informacoes por favor",
+    "ola tenho interesse e gostaria de mais informacoes",
     "ola tenho interesse e gostaria de mais informacoes por favor",
+    "tenho interesse e queria mais informacoes",
     "tenho interesse e queria mais informacoes por favor",
+    "ola tenho interesse e queria mais informacoes",
     "ola tenho interesse e queria mais informacoes por favor"
   ];
 

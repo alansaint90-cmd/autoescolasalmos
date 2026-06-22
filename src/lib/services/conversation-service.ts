@@ -58,11 +58,45 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
   let triage: AiTriageResult | null = null;
   const shouldStartAiFlow = isAiEligibleInbound(inbound, lead.origin, conversationState.created);
   const whatsappAiPaused = !inbound.fromMe ? await isWhatsAppAiPaused() : false;
+  const shouldReactivateAiFlow = !inbound.fromMe
+    && !conversationState.created
+    && conversation.status !== "ai"
+    && isPaidTrafficEntryMessage(inbound.text)
+    && !whatsappAiPaused;
 
   if (inbound.fromMe) {
     const humanControl = await applyWhatsAppHumanControl(conversation.id, lead.id, inbound);
     conversation = humanControl.conversation;
     leadSignal = { ...leadSignal, pipelineStage: "atendimento" };
+  }
+
+  if (shouldReactivateAiFlow) {
+    const [reactivated] = await db
+      .update(conversations)
+      .set({
+        status: "ai",
+        ai_paused_reason: null,
+        updated_at: new Date(),
+        modified_by: SYSTEM_USER_ID
+      })
+      .where(and(eq(conversations.id, conversation.id), eq(conversations.is_deleted, false)))
+      .returning();
+
+    if (reactivated) {
+      conversation = reactivated;
+      await logAiDecision({
+        conversationId: conversation.id,
+        leadId: lead.id,
+        action: "ai_mode_restored",
+        reason: "Lead enviou o gatilho de anuncio em conversa existente; atendimento automatico reativado.",
+        mode: "ai",
+        safetyStatus: "ok",
+        metadata: {
+          sourcePolicy: "paid_entry_message_reactivation",
+          trigger: inbound.text
+        }
+      });
+    }
   }
 
   if (!inbound.fromMe && conversationState.created && !shouldStartAiFlow && conversation.status === "ai") {
@@ -1318,11 +1352,17 @@ function isPaidTrafficEntryMessage(text: string) {
     .trim();
 
   const acceptedMessages = [
+    "tenho interesse gostaria de mais informacoes",
     "tenho interesse gostaria de mais informacoes por favor",
+    "ola tenho interesse gostaria de mais informacoes",
     "ola tenho interesse gostaria de mais informacoes por favor",
+    "tenho interesse e gostaria de mais informacoes",
     "tenho interesse e gostaria de mais informacoes por favor",
+    "ola tenho interesse e gostaria de mais informacoes",
     "ola tenho interesse e gostaria de mais informacoes por favor",
+    "tenho interesse e queria mais informacoes",
     "tenho interesse e queria mais informacoes por favor",
+    "ola tenho interesse e queria mais informacoes",
     "ola tenho interesse e queria mais informacoes por favor"
   ];
 
