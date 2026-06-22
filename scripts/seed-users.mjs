@@ -24,22 +24,28 @@ const seedUsers = [
     password: "AutoPro@2026Admin"
   },
   {
-    name: "Camila",
-    email: "camila@autopro.ia",
+    name: "Geane",
+    email: "geane@autopro.ia",
     role: "gerente",
-    password: "AutoPro@2026Camila"
+    password: "AutoPro@2026Geane"
   },
   {
-    name: "Ana Carolina",
-    email: "ana@autopro.ia",
-    role: "atendente",
-    password: "AutoPro@2026Ana"
+    name: "Silvio",
+    email: "silvio@autopro.ia",
+    role: "gerente",
+    password: "AutoPro@2026Silvio"
   },
   {
-    name: "Aline",
-    email: "aline@autopro.ia",
+    name: "Atendente 1",
+    email: "atendente1@autopro.ia",
     role: "atendente",
-    password: "AutoPro@2026Aline"
+    password: "AutoPro@2026Atendente1"
+  },
+  {
+    name: "Atendente 2",
+    email: "atendente2@autopro.ia",
+    role: "atendente",
+    password: "AutoPro@2026Atendente2"
   },
   {
     name: "Ricardo IA",
