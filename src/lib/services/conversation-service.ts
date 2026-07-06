@@ -1127,7 +1127,7 @@ async function upsertLead(input: NormalizedInboundMessage, signal: LeadSignal) {
   const [existing] = await db
     .select()
     .from(leads)
-    .where(and(eq(leads.phone, input.phone), eq(leads.is_deleted, false)))
+    .where(eq(leads.phone, input.phone))
     .limit(1);
 
   if (existing) {
@@ -1150,10 +1150,12 @@ async function upsertLead(input: NormalizedInboundMessage, signal: LeadSignal) {
         last_message_preview: input.text.slice(0, 280),
         last_interaction_at: now,
         enrollment_closed_at: signal.enrollmentClosedAt ?? existing.enrollment_closed_at,
+        deleted_at: null,
+        is_deleted: false,
         updated_at: now,
         modified_by: SYSTEM_USER_ID
       })
-      .where(and(eq(leads.id, existing.id), eq(leads.is_deleted, false)))
+      .where(eq(leads.id, existing.id))
       .returning();
 
     return updated;
