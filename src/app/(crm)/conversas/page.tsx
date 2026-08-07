@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent, type ReactNode } from "react";
 import {
   Archive,
+  ArrowLeft,
   Ban,
   Bot,
   Camera,
@@ -33,6 +34,7 @@ import {
   Trash2,
   VolumeX,
   UserCheck,
+  UserPlus,
   Video,
   WandSparkles,
   X,
@@ -50,7 +52,7 @@ type QuickReply = {
   attachment?: QuickReplyAttachment;
 };
 
-type InboxView = "all" | "favorites" | "locked" | "archived" | "muted";
+type InboxView = "all" | "favorites" | "followup" | "locked" | "archived" | "muted";
 type PreviewTooltip = { text: string; top: number; left: number } | null;
 const inboxListsStorageKey = "auto-pro-ia:inbox-lists";
 const inboxStateStorageKey = "auto-pro-ia:inbox-state";
@@ -61,7 +63,7 @@ type QuickReplyAttachment = {
   dataUrl: string;
 };
 
-type Conversation = (typeof conversations)[number] & {
+type Conversation = Omit<(typeof conversations)[number], "lead"> & {
   id?: string;
   archived?: boolean;
   muted?: boolean;
@@ -69,11 +71,25 @@ type Conversation = (typeof conversations)[number] & {
   blocked?: boolean;
   cleared?: boolean;
   status: "ai" | "human" | "paused" | "closed";
+  lead: (typeof conversations)[number]["lead"] & {
+    tags?: string[];
+    isAdLead?: boolean;
+    followUpCount?: number;
+    lastFollowUpAt?: string | null;
+    nextFollowUpAt?: string | null;
+    followUpPausedAt?: string | null;
+  };
 };
 
 type CurrentUser = {
   name: string;
   role: string;
+};
+
+type InboxCounts = {
+  all: number;
+  adLeads: number;
+  followUp: number;
 };
 
 const roleLabelMap: Record<string, string> = {
@@ -101,7 +117,7 @@ function formatHumanSender(message: Conversation["messages"][number], currentUse
 }
 
 function formatAiSender(agentName: string) {
-  const name = agentName.trim() || "Camila";
+  const name = agentName.trim() || "Laura";
   return `${name} IA`;
 }
 
@@ -252,6 +268,60 @@ function normalizeSentiment(value?: string): LeadSentiment {
   return value === "positivo" || value === "duvida" || value === "negativo" ? value : "neutro";
 }
 
+function normalizeComparable(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isAdsOrigin(origin: string) {
+  const normalized = normalizeComparable(origin);
+  return (
+    normalized.includes("meta ads")
+    || normalized.includes("facebook ads")
+    || normalized.includes("instagram ads")
+  );
+}
+
+function isAdsTag(tag: string) {
+  const normalized = normalizeComparable(tag);
+  return (
+    normalized === "anuncio"
+    || normalized === "meta"
+    || normalized === "meta ads"
+    || normalized === "facebook"
+    || normalized === "facebook ads"
+    || normalized === "instagram"
+    || normalized === "instagram ads"
+  );
+}
+
+function isAdLeadConversation(conversation: Conversation) {
+  if (conversation.lead.isAdLead) return true;
+
+  return isAdsOrigin(conversation.lead.origin) || (conversation.lead.tags ?? []).some(isAdsTag);
+}
+
+function isActiveAiFollowUpConversation(conversation: Conversation, manualConversationIds: string[] = []) {
+  const hasActiveFollowUpFlow = (
+    (conversation.lead.followUpCount ?? 0) > 0
+    || Boolean(conversation.lead.lastFollowUpAt)
+    || Boolean(conversation.lead.nextFollowUpAt)
+    || conversation.lead.stage === "followup"
+  );
+  const isHumanIntervention = (
+    conversation.status === "human"
+    || conversation.status === "paused"
+    || Boolean(conversation.lead.followUpPausedAt)
+    || manualConversationIds.includes(conversation.lead.id)
+    || Boolean(conversation.id && manualConversationIds.includes(conversation.id))
+  );
+
+  return isAdLeadConversation(conversation) && conversation.status === "ai" && hasActiveFollowUpFlow && !isHumanIntervention;
+}
+
 function attachmentTypeFromMime(mimeType: string): QuickReplyAttachment["type"] | null {
   if (mimeType.startsWith("audio/")) return "audio";
   if (mimeType.startsWith("image/")) return "image";
@@ -272,7 +342,7 @@ function AttachmentIcon({ type, className }: { type: QuickReplyAttachment["type"
 }
 
 function messageMediaSource(message: Conversation["messages"][number]) {
-  return message.media?.dataUrl || message.media?.sourceUrl || "";
+  return message.media?.sourceUrl || message.media?.dataUrl || "";
 }
 
 function messageTextForDisplay(message: Conversation["messages"][number]) {
@@ -291,9 +361,7 @@ function messageTextForDisplay(message: Conversation["messages"][number]) {
     return message.media.caption || "";
   }
   if (message.media.type === "document" && /^\[documento recebido/i.test(text)) return "";
-  if (message.media.type === "audio") {
-    return message.media.transcription || text.replace(/^audio transcrito do cliente:\s*/i, "");
-  }
+  if (message.media.type === "audio") return "";
 
   return text;
 }
@@ -306,6 +374,7 @@ function formatMediaDuration(seconds?: number) {
 }
 
 function ChatMediaAttachment({ message }: { message: Conversation["messages"][number] }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const media = message.media;
   if (!media) return null;
 
@@ -318,20 +387,27 @@ function ChatMediaAttachment({ message }: { message: Conversation["messages"][nu
   );
 
   if (media.type === "image") {
+    const canPreviewImage = Boolean(source) && !imageFailed;
+
     return (
       <a
-        href={source || undefined}
+        href={source && !imageFailed ? source : undefined}
         target="_blank"
         rel="noreferrer"
         className="mb-3 block overflow-hidden rounded-xl border border-white/10 bg-black/20"
       >
-        {source ? (
+        {canPreviewImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={source} alt={fileName} className="max-h-72 w-full object-cover" />
+          <img
+            src={source}
+            alt=""
+            className="max-h-72 w-full object-cover"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
           <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
             <ImageIcon className="size-4 text-primary" />
-            Imagem recebida sem arquivo disponivel.
+            Imagem recebida, mas o arquivo original nao esta disponivel.
           </div>
         )}
       </a>
@@ -363,7 +439,10 @@ function ChatMediaAttachment({ message }: { message: Conversation["messages"][nu
     return (
       <div className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-black/20">
         {source ? (
-          <video controls preload="metadata" src={source} className="max-h-80 w-full bg-black" />
+          <video controls playsInline preload="metadata" className="max-h-80 w-full bg-black">
+            <source src={source} type={media.mimeType || "video/mp4"} />
+            Seu navegador nao conseguiu reproduzir este video.
+          </video>
         ) : (
           <div className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
             <Video className="size-4 text-primary" />
@@ -474,16 +553,25 @@ function LeadInitialAvatar({
   name: string;
   avatar?: string;
   temperature: Conversation["lead"]["temperature"];
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "inbox" | "md" | "lg" | "xl";
   neutral?: boolean;
 }) {
-  const displayAvatar = avatar && !avatar.includes("api.dicebear.com/7.x/initials") ? avatar : undefined;
+  const [imageFailed, setImageFailed] = useState(false);
+  const normalizedAvatar = avatar?.trim();
+  const displayAvatar = normalizedAvatar && !normalizedAvatar.includes("api.dicebear.com/7.x/initials") && !imageFailed
+    ? normalizedAvatar
+    : undefined;
   const sizes = {
     sm: "size-9 text-xs",
+    inbox: "size-11 text-sm",
     md: "size-10 text-sm",
     lg: "size-12 text-base",
     xl: "size-14 text-lg"
   };
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [normalizedAvatar]);
 
   return (
     <span
@@ -495,7 +583,13 @@ function LeadInitialAvatar({
       aria-hidden="true"
     >
       {displayAvatar ? (
-        <img src={displayAvatar} alt="" className="absolute inset-0 size-full object-cover" />
+        <img
+          src={displayAvatar}
+          alt=""
+          className="absolute inset-0 size-full object-cover"
+          referrerPolicy="no-referrer"
+          onError={() => setImageFailed(true)}
+        />
       ) : (
         <span className="relative z-10">{initialsFromName(name)}</span>
       )}
@@ -579,6 +673,7 @@ export default function ConversasPage() {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(defaultQuickReplies);
   const [conversationQuery, setConversationQuery] = useState("");
   const [inboxView, setInboxView] = useState<InboxView>("all");
+  const [inboxCounts, setInboxCounts] = useState<InboxCounts>({ all: 0, adLeads: 0, followUp: 0 });
   const [archivedConversationIds, setArchivedConversationIds] = useState<string[]>([]);
   const [blockedConversationIds, setBlockedConversationIds] = useState<string[]>([]);
   const [mutedConversationIds, setMutedConversationIds] = useState<string[]>([]);
@@ -614,8 +709,13 @@ export default function ConversasPage() {
   const [replyFeedback, setReplyFeedback] = useState("");
   const [openConversationMenuId, setOpenConversationMenuId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [aiAgentName, setAiAgentName] = useState("Camila");
+  const [aiAgentName, setAiAgentName] = useState("Laura");
   const [showQuickTools, setShowQuickTools] = useState(false);
+  const [isEditingLeadContact, setIsEditingLeadContact] = useState(false);
+  const [leadContactName, setLeadContactName] = useState("");
+  const [leadContactPhone, setLeadContactPhone] = useState("");
+  const [isSavingLeadContact, setIsSavingLeadContact] = useState(false);
+  const [leadContactFeedback, setLeadContactFeedback] = useState("");
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const genericFileInputRef = useRef<HTMLInputElement | null>(null);
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -625,6 +725,7 @@ export default function ConversasPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const activeIdRef = useRef("");
   const lastScrolledLeadIdRef = useRef("");
+  const shouldAutoScrollRef = useRef(true);
   const initialUrlSelectionAppliedRef = useRef(false);
   const hasLoadedConversationsRef = useRef(false);
   const filteredConversations = useMemo(() => {
@@ -637,7 +738,8 @@ export default function ConversasPage() {
       if (inboxView === "archived") return isArchived;
       if (inboxView === "muted") return isMuted && !isArchived;
       if (isArchived) return false;
-      if (inboxView === "favorites") return favoriteConversationIds.includes(conversation.lead.id) || conversation.lead.temperature === "quente" || index === 0;
+      if (inboxView === "favorites") return isAdLeadConversation(conversation);
+      if (inboxView === "followup") return isActiveAiFollowUpConversation(conversation, manualConversationIds);
       if (inboxView === "locked") return isBlocked || manualConversationIds.includes(conversation.lead.id) || conversation.status === "human" || conversation.status === "paused";
       return true;
     }).sort((a, b) => Number(pinnedConversationIds.includes(b.lead.id)) - Number(pinnedConversationIds.includes(a.lead.id)));
@@ -667,7 +769,13 @@ export default function ConversasPage() {
   const hasTemporaryMessages = active ? temporaryMessageIds.includes(active.lead.id) : false;
   const hasAdvancedPrivacy = active ? privacyConversationIds.includes(active.lead.id) : false;
   const currentAgent = currentUser?.name?.trim() || "Atendente";
-  const favoriteCount = availableConversations.filter((conversation, index) => favoriteConversationIds.includes(conversation.lead.id) || conversation.lead.temperature === "quente" || index === 0).length;
+  const activeInboxConversations = availableConversations.filter((conversation) => !archivedConversationIds.includes(conversation.lead.id));
+  const localAllInboxCount = activeInboxConversations.length;
+  const localAdLeadsCount = activeInboxConversations.filter(isAdLeadConversation).length;
+  const localFollowUpCount = activeInboxConversations.filter((conversation) => isActiveAiFollowUpConversation(conversation, manualConversationIds)).length;
+  const allInboxCount = Math.max(inboxCounts.all, localAllInboxCount);
+  const adLeadsCount = Math.max(inboxCounts.adLeads, localAdLeadsCount);
+  const followUpCount = Math.max(inboxCounts.followUp, localFollowUpCount);
   const archivedCount = archivedConversationIds.length;
   const mutedCount = mutedConversationIds.filter((id) => !archivedConversationIds.includes(id)).length;
   const activeConversationId = active ? (active as Conversation & { id?: string }).id : undefined;
@@ -678,6 +786,20 @@ export default function ConversasPage() {
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  useEffect(() => {
+    if (!active) {
+      setLeadContactName("");
+      setLeadContactPhone("");
+      setIsEditingLeadContact(false);
+      return;
+    }
+
+    setLeadContactName(active.lead.name);
+    setLeadContactPhone(active.lead.phone);
+    setIsEditingLeadContact(false);
+    setLeadContactFeedback("");
+  }, [active?.lead.id]);
 
   useEffect(() => {
     return () => {
@@ -723,7 +845,17 @@ export default function ConversasPage() {
   useEffect(() => {
     if (!active) return;
 
-    const behavior: ScrollBehavior = lastScrolledLeadIdRef.current === active.lead.id ? "smooth" : "auto";
+    const isSameLead = lastScrolledLeadIdRef.current === active.lead.id;
+    const scrollElement = chatScrollRef.current;
+    const isNearBottom = scrollElement
+      ? scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight < 96
+      : true;
+
+    if (isSameLead && !isNearBottom && !shouldAutoScrollRef.current) {
+      return;
+    }
+
+    const behavior: ScrollBehavior = isSameLead ? "smooth" : "auto";
     lastScrolledLeadIdRef.current = active.lead.id;
 
     window.requestAnimationFrame(() => {
@@ -731,6 +863,7 @@ export default function ConversasPage() {
 
       if (chatScrollRef.current) {
         chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        shouldAutoScrollRef.current = true;
       }
     });
   }, [active, activeId, activeMessageSignature]);
@@ -835,7 +968,7 @@ export default function ConversasPage() {
 
       try {
         const response = await fetchWithTimeout("/api/conversations?limit=80&messages=25", { cache: "no-store" }, 15_000);
-        const data = await response.json().catch(() => ({})) as { conversations?: Conversation[]; error?: string };
+        const data = await response.json().catch(() => ({})) as { conversations?: Conversation[]; counts?: Partial<InboxCounts>; error?: string };
         if (!response.ok) throw new Error(data.error || "Falha ao carregar conversas reais.");
         const mergedConversations = data.conversations ?? [];
 
@@ -843,6 +976,11 @@ export default function ConversasPage() {
 
         setConversationLoadError("");
         setAvailableConversations(mergedConversations);
+        setInboxCounts({
+          all: Number(data.counts?.all ?? 0),
+          adLeads: Number(data.counts?.adLeads ?? 0),
+          followUp: Number(data.counts?.followUp ?? 0)
+        });
         hasLoadedConversationsRef.current = true;
         setArchivedConversationIds(mergedConversations.filter((conversation) => conversation.archived).map((conversation) => conversation.lead.id));
         setBlockedConversationIds(mergedConversations.filter((conversation) => conversation.blocked).map((conversation) => conversation.lead.id));
@@ -1102,6 +1240,96 @@ export default function ConversasPage() {
     }
   }
 
+  function updateLeadContactLocally(leadId: string, updates: Partial<Conversation["lead"]>) {
+    setAvailableConversations((items) =>
+      items.map((conversation) =>
+        conversation.lead.id === leadId
+          ? {
+              ...conversation,
+              lead: {
+                ...conversation.lead,
+                ...updates
+              }
+            }
+          : conversation
+      )
+    );
+  }
+
+  async function saveLeadContact(options?: { feedback?: string; stayEditing?: boolean }) {
+    if (!active || isSavingLeadContact) return;
+
+    const name = leadContactName.trim();
+    const phone = leadContactPhone.trim();
+    if (!name || !phone) {
+      window.alert("Informe nome e telefone do contato.");
+      return;
+    }
+
+    setIsSavingLeadContact(true);
+    setLeadContactFeedback("");
+
+    try {
+      const response = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: active.lead.id,
+          name,
+          phone
+        })
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Nao foi possivel salvar o contato.");
+      }
+
+      updateLeadContactLocally(active.lead.id, { name, phone });
+      setLeadContactFeedback(options?.feedback || "Contato salvo em Leads.");
+      if (!options?.stayEditing) setIsEditingLeadContact(false);
+      window.setTimeout(() => setLeadContactFeedback(""), 2600);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Nao foi possivel salvar o contato.");
+    } finally {
+      setIsSavingLeadContact(false);
+    }
+  }
+
+  async function deleteLeadContact() {
+    if (!active || isSavingLeadContact) return;
+
+    const confirmed = window.confirm(`Excluir o contato ${active.lead.name} da lista de leads?`);
+    if (!confirmed) return;
+
+    setIsSavingLeadContact(true);
+
+    try {
+      const response = await fetch(`/api/leads?id=${encodeURIComponent(active.lead.id)}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Nao foi possivel excluir o contato.");
+      }
+
+      const deletedLeadId = active.lead.id;
+      setAvailableConversations((items) => items.filter((conversation) => conversation.lead.id !== deletedLeadId));
+      setArchivedConversationIds((ids) => ids.filter((id) => id !== deletedLeadId));
+      setFavoriteConversationIds((ids) => ids.filter((id) => id !== deletedLeadId));
+      setMutedConversationIds((ids) => ids.filter((id) => id !== deletedLeadId));
+      setPinnedConversationIds((ids) => ids.filter((id) => id !== deletedLeadId));
+      setShowLeadProfile(false);
+      setIsEditingLeadContact(false);
+
+      const next = availableConversations.find((conversation) => conversation.lead.id !== deletedLeadId);
+      setActiveId(next?.lead.id ?? "");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Nao foi possivel excluir o contato.");
+    } finally {
+      setIsSavingLeadContact(false);
+    }
+  }
+
   function startEditMessage(message: Conversation["messages"][number]) {
     if (message.from === "lead") return;
     setEditingMessageId(message.id);
@@ -1233,7 +1461,7 @@ export default function ConversasPage() {
                   ...conversation.lead,
                   responsible: currentAgent
                 },
-                preview: "Atendimento assumido por Carla Vendas."
+                preview: "Atendimento assumido por Sandra."
               }
             : conversation
         )
@@ -1818,13 +2046,13 @@ export default function ConversasPage() {
         )}
       >
         <aside className="flex h-full min-h-0 flex-col overflow-hidden border-r border-white/[0.08] bg-[#060a12]/95 shadow-[inset_-18px_0_42px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-          <div className="shrink-0 border-b border-white/[0.08] bg-[#080d16]/92 p-3">
+          <div className="shrink-0 overflow-x-hidden border-b border-white/[0.08] bg-[#080d16]/92 p-3">
             <div className="mb-2.5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-extrabold">Caixa de entrada</h2>
               </div>
               <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary">
-                {availableConversations.length} ativos
+                {allInboxCount} ativos
               </span>
             </div>
             <div className="relative">
@@ -1836,11 +2064,12 @@ export default function ConversasPage() {
                 className="h-10 w-full rounded-2xl border border-white/10 bg-white/[0.045] pl-10 pr-3 text-sm outline-none transition placeholder:text-muted-foreground/70 hover:border-white/[0.16] focus:border-primary/55 focus:ring-4 focus:ring-primary/10"
               />
             </div>
-            <div className="mt-3 flex items-center gap-1.5">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <div className="mt-3 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1">
+              <div className="grid min-w-0 grid-cols-3 gap-1">
                 {[
-                  { id: "all" as const, label: "Tudo", count: availableConversations.length },
-                  { id: "favorites" as const, label: "Favoritos", count: favoriteCount }
+                  { id: "all" as const, label: "Tudo", count: allInboxCount },
+                  { id: "favorites" as const, label: "Leads anuncios", count: adLeadsCount },
+                  { id: "followup" as const, label: "Follow up", count: followUpCount }
                 ].map((item) => {
                   const active = !activeInboxList && inboxView === item.id;
 
@@ -1849,26 +2078,19 @@ export default function ConversasPage() {
                       key={item.id}
                       type="button"
                       onClick={() => selectInboxView(item.id)}
+                      title={item.id === "favorites" ? "Leads anuncios" : item.label}
                       className={cn(
-                        "h-8 shrink-0 rounded-full border px-3 text-xs font-bold transition",
+                        "flex h-8 min-w-0 items-center justify-center rounded-full border px-1.5 text-[10px] font-bold transition",
                         active
                           ? "border-primary/45 bg-primary/18 text-primary"
                           : "border-white/10 bg-white/[0.035] text-muted-foreground hover:border-white/20 hover:text-foreground"
                       )}
                     >
-                      <span>{item.label}</span>
-                      <span className={cn("ml-1 rounded-full px-1.5 py-0.5 text-[10px]", active ? "bg-[#0B1120]/18" : "bg-white/[0.06]")}>{item.count}</span>
+                      <span className="min-w-0 truncate">{item.label}</span>
+                      <span className={cn("ml-1 shrink-0 rounded-full px-1 py-0.5 text-[9px]", active ? "bg-[#0B1120]/18" : "bg-white/[0.06]")}>{item.count}</span>
                     </button>
                   );
                 })}
-                {activeInboxList ? (
-                  <button
-                    type="button"
-                    className="h-8 shrink-0 rounded-full border border-primary/45 bg-primary/18 px-3 text-xs font-bold text-primary"
-                  >
-                    {activeInboxList}
-                  </button>
-                ) : null}
               </div>
               <button
                 type="button"
@@ -1876,24 +2098,24 @@ export default function ConversasPage() {
                   setShowInboxLists(true);
                   setEditingInboxList(null);
                 }}
-                className="grid size-8 shrink-0 place-items-center rounded-full border border-primary/30 bg-primary/12 text-primary transition hover:bg-primary/20"
+                className="grid size-7 shrink-0 place-items-center rounded-full border border-primary/30 bg-primary/12 text-primary transition hover:bg-primary/20"
                 aria-label="Criar nova lista"
               >
-                <Plus className="size-4" />
+                <Plus className="size-3.5" />
               </button>
               <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowInboxLists((current) => !current)}
                   className={cn(
-                    "grid size-8 place-items-center rounded-full border transition",
+                    "grid size-7 place-items-center rounded-full border transition",
                     showInboxLists
                       ? "border-primary/40 bg-primary/14 text-primary"
                       : "border-white/10 bg-white/[0.035] text-muted-foreground hover:border-white/20 hover:text-foreground"
                   )}
                   aria-label="Abrir listas da caixa de entrada"
                 >
-                  <ChevronDown className={cn("size-4 transition", showInboxLists && "rotate-180")} />
+                  <ChevronDown className={cn("size-3.5 transition", showInboxLists && "rotate-180")} />
                 </button>
                 {showInboxLists ? (
                   <div className="absolute right-0 top-9 z-[120] w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#0B1120]/[0.98] p-2 shadow-[0_24px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl">
@@ -2046,7 +2268,7 @@ export default function ConversasPage() {
                     className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                   >
                   <div className="relative shrink-0">
-                    <LeadInitialAvatar name={conversation.lead.name} avatar={conversation.lead.avatar} temperature={conversation.lead.temperature} size="sm" neutral />
+                    <LeadInitialAvatar name={conversation.lead.name} avatar={conversation.lead.avatar} temperature={conversation.lead.temperature} size="inbox" neutral />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
@@ -2174,7 +2396,14 @@ export default function ConversasPage() {
             </div>
           </div>
 
-          <div ref={chatScrollRef} className="whatsapp-chat-bg flex-1 overflow-y-auto p-4 scrollbar-thin">
+          <div
+            ref={chatScrollRef}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              shouldAutoScrollRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 96;
+            }}
+            className="whatsapp-chat-bg flex-1 overflow-y-auto p-4 scrollbar-thin"
+          >
             <div className="flex w-full flex-col space-y-4">
             {active.messages.map((message) => {
               const isCompany = message.from !== "lead";
@@ -2256,11 +2485,6 @@ export default function ConversasPage() {
                         <ChatMediaAttachment message={message} />
                         {displayText ? (
                           <p className="leading-6">
-                            {message.media?.type === "audio" ? (
-                              <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">
-                                Transcricao
-                              </span>
-                            ) : null}
                             {displayText}
                           </p>
                         ) : null}
@@ -2457,90 +2681,177 @@ export default function ConversasPage() {
 
         {showLeadProfile ? (
         <aside className="hidden min-h-0 flex-col gap-2.5 overflow-y-auto border-l border-white/[0.06] bg-[#070c14]/92 p-3 backdrop-blur-xl scrollbar-thin xl:flex">
-          <section className="relative rounded-2xl border border-white/[0.08] bg-[linear-gradient(145deg,rgba(17,24,39,0.72),rgba(8,13,22,0.92))] p-4 shadow-[0_16px_42px_rgba(0,0,0,0.20)]">
-            <div className="absolute right-3 top-3">
-              <button
-                type="button"
-                onClick={() => setShowLeadProfile(false)}
-                className="grid size-7 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-slate-400 transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
-                aria-label="Fechar painel do lead"
-                title="Fechar painel do lead"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-            <div className="flex flex-col items-center pt-1 text-center">
-              <LeadInitialAvatar name={active.lead.name} avatar={active.lead.avatar} temperature={active.lead.temperature} size="xl" />
-              <div className="mt-3 min-w-0">
-                <div className="max-w-[230px] truncate text-sm font-extrabold text-slate-100">{active.lead.name}</div>
-                <div className="mt-1 truncate text-[11px] text-muted-foreground">{active.lead.phone}</div>
+          <section className="relative min-w-0 overflow-hidden rounded-2xl border border-white/[0.08] bg-[linear-gradient(145deg,rgba(17,24,39,0.72),rgba(8,13,22,0.92))] p-3 shadow-[0_16px_42px_rgba(0,0,0,0.20)]">
+            {isEditingLeadContact ? (
+              <div className="min-w-0">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingLeadContact(false);
+                      setLeadContactName(active.lead.name);
+                      setLeadContactPhone(active.lead.phone);
+                    }}
+                    className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+                  >
+                    <ArrowLeft className="size-4" />
+                    <span className="truncate">Editar contato</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteLeadContact()}
+                    disabled={isSavingLeadContact}
+                    className="grid size-9 place-items-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-200 transition hover:border-red-300/40 hover:bg-red-500/16 disabled:opacity-50"
+                    aria-label="Excluir contato"
+                    title="Excluir contato"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+
+                <div className="grid min-w-0 gap-4">
+                  <label className="grid gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Nome</span>
+                    <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#0B1120]/72 px-3 py-2.5 focus-within:border-primary/45">
+                      <UserCheck className="size-4 shrink-0 text-slate-400" />
+                      <input
+                        value={leadContactName}
+                        onChange={(event) => setLeadContactName(event.target.value)}
+                        className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-100 outline-none placeholder:text-slate-500"
+                        placeholder="Nome do contato"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Numero do telefone</span>
+                    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-2xl border border-white/[0.08] bg-[#0B1120]/72 px-3 py-2.5 focus-within:border-primary/45">
+                      <Phone className="size-4 shrink-0 text-slate-400" />
+                      <span className="w-fit rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-bold text-slate-300">BR +55</span>
+                      <input
+                        value={leadContactPhone}
+                        onChange={(event) => setLeadContactPhone(event.target.value)}
+                        className="col-span-2 min-w-0 bg-transparent text-sm font-bold text-slate-100 outline-none placeholder:text-slate-500"
+                        placeholder="Telefone"
+                      />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500">Esse numero sera salvo no cadastro do lead.</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => void saveLeadContact()}
+                    disabled={isSavingLeadContact}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-xs font-black text-primary-foreground shadow-[0_12px_34px_rgba(250,204,21,0.18)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingLeadContact ? "Salvando..." : "Salvar contato"}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                className="mt-3 grid size-9 place-items-center rounded-full border border-white/[0.08] bg-white/[0.045] text-slate-300 transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
-                title="Pesquisar na conversa"
-                aria-label="Pesquisar na conversa"
-              >
-                <Search className="size-4" />
-              </button>
-              <div className="mt-3 max-w-full text-left">
-                <div className="text-[10px] font-semibold text-slate-500">Recado</div>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{active.lead.notes ?? active.preview}</p>
-              </div>
-              <span className={cn("mt-3 rounded-lg border px-2 py-1 text-[9px] font-black", isManualAttendance ? "border-[#FACC15]/28 bg-[#FACC15]/8 text-[#FACC15]" : "border-[#0B5FA5]/26 bg-[#0B5FA5]/10 text-sky-100")}>
-                {isManualAttendance ? "Piloto" : "IA ativa"}
+            ) : (
+              <>
+                <div className="absolute right-3 top-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingLeadContact(true)}
+                    className="grid size-7 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-slate-400 transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+                    aria-label="Editar contato"
+                    title="Editar contato"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeadProfile(false)}
+                    className="grid size-7 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-slate-400 transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+                    aria-label="Fechar painel do lead"
+                    title="Fechar painel do lead"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="flex flex-col items-center pt-1 text-center">
+                  <LeadInitialAvatar name={active.lead.name} avatar={active.lead.avatar} temperature={active.lead.temperature} size="xl" />
+                  <div className="mt-3 min-w-0">
+                    <div className="max-w-[230px] truncate text-sm font-extrabold text-slate-100">{active.lead.name}</div>
+                    <div className="mt-1 truncate text-[11px] text-muted-foreground">{active.lead.phone}</div>
+                  </div>
+                  <div className="mt-3 flex items-start justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void saveLeadContact({ feedback: "Contato adicionado em Leads." })}
+                      disabled={isSavingLeadContact}
+                      className="group grid gap-1.5 text-center text-[10px] font-bold text-slate-300 disabled:opacity-50"
+                      title="Adicionar contato em Leads"
+                      aria-label="Adicionar contato em Leads"
+                    >
+                      <span className="grid size-10 place-items-center rounded-full border border-white/[0.08] bg-white/[0.045] transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+                        <UserPlus className="size-4" />
+                      </span>
+                      Adicionar
+                    </button>
+                    <button
+                      type="button"
+                      className="group grid gap-1.5 text-center text-[10px] font-bold text-slate-300"
+                      title="Pesquisar na conversa"
+                      aria-label="Pesquisar na conversa"
+                    >
+                      <span className="grid size-10 place-items-center rounded-full border border-white/[0.08] bg-white/[0.045] transition group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+                        <Search className="size-4" />
+                      </span>
+                      Pesquisar
+                    </button>
+                  </div>
+                  {leadContactFeedback ? (
+                    <span className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] font-bold text-emerald-200">
+                      {leadContactFeedback}
+                    </span>
+                  ) : null}
+                  <div className="mt-3 max-w-full text-left">
+                    <div className="text-[10px] font-semibold text-slate-500">Recado</div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{active.lead.notes ?? active.preview}</p>
+                  </div>
+                  <span className={cn("mt-3 rounded-lg border px-2 py-1 text-[9px] font-black", isManualAttendance ? "border-[#FACC15]/28 bg-[#FACC15]/8 text-[#FACC15]" : "border-[#0B5FA5]/26 bg-[#0B5FA5]/10 text-sky-100")}>
+                    {isManualAttendance ? "Piloto" : "IA ativa"}
+                  </span>
+                </div>
+              </>
+            )}
+
+          </section>
+
+          <section className="shrink-0 rounded-2xl border border-white/[0.08] bg-[#0B1120]/88 p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+            <div className="flex items-center justify-between gap-2 text-[10px]">
+              <span className="font-black uppercase tracking-[0.16em] text-slate-400">Follow-up</span>
+              <span className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 font-bold text-slate-300">
+                {((active.lead as Conversation["lead"] & { followUpCount?: number }).followUpCount ?? 0)}/5
               </span>
             </div>
-
-            <div className="mt-3 grid gap-2">
-              <CompactLeadMeter
-                icon={Thermometer}
-                label="Termometro"
-                value={active.lead.temperature}
-                helper={temperatureBar[active.lead.temperature].label}
-                width={temperatureBar[active.lead.temperature].width}
-              />
-              <CompactLeadMeter
-                icon={Smile}
-                label="Sentimento"
-                value={getLeadSentiment(active)}
-                helper={sentimentBar[getLeadSentiment(active)].label}
-                width={sentimentBar[getLeadSentiment(active)].width}
-              />
-            </div>
-            <div className="mt-3 rounded-2xl border border-white/[0.08] bg-[#0B1120]/62 p-2.5">
-              <div className="flex items-center justify-between gap-2 text-[10px]">
-                <span className="font-black uppercase tracking-[0.16em] text-slate-400">Follow-up</span>
-                <span className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 font-bold text-slate-300">
-                  {((active.lead as Conversation["lead"] & { followUpCount?: number }).followUpCount ?? 0)}/5
-                </span>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void runFollowUpAction("send-now")}
-                  disabled={isFollowUpActionRunning}
-                  className="rounded-xl border border-[#FACC15]/22 bg-[#FACC15]/10 px-2 py-2 text-[10px] font-black text-[#FACC15] transition hover:bg-[#FACC15]/16 disabled:opacity-50"
-                >
-                  Enviar agora
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runFollowUpAction("pause")}
-                  disabled={isFollowUpActionRunning}
-                  className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-2 py-2 text-[10px] font-black text-slate-300 transition hover:bg-white/[0.07] disabled:opacity-50"
-                >
-                  Pausar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runFollowUpAction("resume")}
-                  disabled={isFollowUpActionRunning}
-                  className="rounded-xl border border-sky-400/20 bg-sky-400/10 px-2 py-2 text-[10px] font-black text-sky-100 transition hover:bg-sky-400/14 disabled:opacity-50"
-                >
-                  Retomar
-                </button>
-              </div>
+            <div className="mt-2 grid min-w-0 grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => void runFollowUpAction("send-now")}
+                disabled={isFollowUpActionRunning}
+                className="min-w-0 rounded-xl border border-[#FACC15]/22 bg-[#FACC15]/10 px-1.5 py-2 text-[9px] font-black leading-tight text-[#FACC15] transition hover:bg-[#FACC15]/16 disabled:opacity-50"
+              >
+                Enviar agora
+              </button>
+              <button
+                type="button"
+                onClick={() => void runFollowUpAction("pause")}
+                disabled={isFollowUpActionRunning}
+                className="min-w-0 rounded-xl border border-white/[0.08] bg-white/[0.04] px-1.5 py-2 text-[9px] font-black leading-tight text-slate-300 transition hover:bg-white/[0.07] disabled:opacity-50"
+              >
+                Pausar
+              </button>
+              <button
+                type="button"
+                onClick={() => void runFollowUpAction("resume")}
+                disabled={isFollowUpActionRunning}
+                className="min-w-0 rounded-xl border border-sky-400/20 bg-sky-400/10 px-1.5 py-2 text-[9px] font-black leading-tight text-sky-100 transition hover:bg-sky-400/14 disabled:opacity-50"
+              >
+                Retomar
+              </button>
             </div>
           </section>
 

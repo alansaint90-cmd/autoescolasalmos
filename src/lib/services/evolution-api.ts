@@ -90,7 +90,7 @@ export async function updateWhatsAppText(input: {
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
     console.error("[evolution-api] update failed", { status: response.status, body: errorBody });
-    throw new Error(`Evolution API falhou ao editar mensagem: ${response.status}`);
+    throw new Error(formatEvolutionError("editar mensagem", response.status, errorBody));
   }
 
   console.info("[evolution-api] update success", { status: response.status });
@@ -123,7 +123,7 @@ export async function deleteWhatsAppMessageForEveryone(input: {
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
     console.error("[evolution-api] delete failed", { status: response.status, body: errorBody });
-    throw new Error(`Evolution API falhou ao apagar mensagem: ${response.status}`);
+    throw new Error(formatEvolutionError("apagar mensagem", response.status, errorBody));
   }
 
   console.info("[evolution-api] delete success", { status: response.status });
@@ -132,7 +132,8 @@ export async function deleteWhatsAppMessageForEveryone(input: {
 
 export async function sendWhatsAppMedia(input: SendMediaInput) {
   const url = new URL(`/message/sendMedia/${env.EVOLUTION_INSTANCE_NAME}`, env.EVOLUTION_API_URL);
-  const maskedPhone = input.phone.replace(/\d(?=\d{4})/g, "*");
+  const cleanPhone = normalizePhoneForEvolution(input.phone);
+  const maskedPhone = cleanPhone.replace(/\d(?=\d{4})/g, "*");
   const media = stripDataUrlPrefix(input.mediaDataUrl);
 
   console.info("[evolution-api] sending media", {
@@ -149,7 +150,7 @@ export async function sendWhatsAppMedia(input: SendMediaInput) {
       apikey: env.EVOLUTION_API_KEY
     },
     body: JSON.stringify({
-      number: input.phone,
+      number: cleanPhone,
       mediatype: input.mediaType,
       media,
       caption: input.caption ? sanitizeWhatsAppText(input.caption) : undefined,
@@ -160,7 +161,7 @@ export async function sendWhatsAppMedia(input: SendMediaInput) {
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
     console.error("[evolution-api] media send failed", { status: response.status, body: errorBody });
-    throw new Error(`Evolution API falhou ao enviar midia: ${response.status}`);
+    throw new Error(formatEvolutionError("enviar midia", response.status, errorBody));
   }
 
   console.info("[evolution-api] media send success", { status: response.status });
@@ -211,7 +212,13 @@ export async function fetchWhatsAppProfilePicture(phone: string) {
 
 async function sendSingleWhatsAppText(input: SendTextInput) {
   const url = new URL(`/message/sendText/${env.EVOLUTION_INSTANCE_NAME}`, env.EVOLUTION_API_URL);
-  const maskedPhone = input.phone.replace(/\d(?=\d{4})/g, "*");
+  const cleanPhone = normalizePhoneForEvolution(input.phone);
+  const maskedPhone = cleanPhone.replace(/\d(?=\d{4})/g, "*");
+  const text = sanitizeWhatsAppText(input.text);
+
+  if (!text) {
+    throw new Error("Mensagem vazia para envio pela Evolution API.");
+  }
 
   console.info("[evolution-api] sending text", {
     url: url.toString(),
@@ -225,15 +232,15 @@ async function sendSingleWhatsAppText(input: SendTextInput) {
       apikey: env.EVOLUTION_API_KEY
     },
     body: JSON.stringify({
-      number: input.phone,
-      text: input.text
+      number: cleanPhone,
+      text
     })
   });
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
     console.error("[evolution-api] send failed", { status: response.status, body: errorBody });
-    throw new Error(`Evolution API falhou ao enviar mensagem: ${response.status}`);
+    throw new Error(formatEvolutionError("enviar mensagem", response.status, errorBody));
   }
 
   console.info("[evolution-api] send success", { status: response.status });
@@ -323,4 +330,24 @@ export function sanitizeWhatsAppText(text: string) {
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function normalizePhoneForEvolution(value: string) {
+  const phone = value.replace(/\D/g, "");
+  if (!phone) {
+    throw new Error("Telefone vazio para envio pela Evolution API.");
+  }
+
+  return phone;
+}
+
+function formatEvolutionError(action: string, status: number, body: string) {
+  const normalizedBody = body
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
+
+  return normalizedBody
+    ? `Evolution API falhou ao ${action}: ${status}. Detalhe: ${normalizedBody}`
+    : `Evolution API falhou ao ${action}: ${status}. Sem detalhe retornado pela Evolution.`;
 }

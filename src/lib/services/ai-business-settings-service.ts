@@ -13,7 +13,7 @@ function normalizeSettings(value: unknown): AiBusinessSettings {
   return {
     agentName: partial.agentName?.trim() || defaultAiBusinessSettings.agentName,
     prices: sanitizeAiBusinessText(partial.prices?.trim() || defaultAiBusinessSettings.prices),
-    address: partial.address?.trim() || defaultAiBusinessSettings.address,
+    address: sanitizeAddress(partial.address?.trim() || defaultAiBusinessSettings.address),
     hours: partial.hours?.trim() || defaultAiBusinessSettings.hours,
     customPrompt: sanitizeAiBusinessText(partial.customPrompt?.trim() || defaultAiBusinessSettings.customPrompt),
     triagePrompt: sanitizeAiBusinessText(partial.triagePrompt?.trim() || defaultAiBusinessSettings.triagePrompt),
@@ -30,7 +30,16 @@ function sanitizeAiBusinessText(text: string) {
     .replace(/psicot[eé]cnico/gi, "avaliacao psicologica")
     .replace(/psicoteste/gi, "avaliacao psicologica")
     .replace(/n[aã]o\s+e\s+vendido\s+(?:pela|na)\s+CFC/gi, "e vendido na CFC")
-    .replace(/precisa\s+(?:ser\s+)?feito\s+em\s+cl[ií]nicas\s+autorizadas/gi, "e comprado na Auto Escola Salmos");
+    .replace(/precisa\s+(?:ser\s+)?feito\s+em\s+cl[ií]nicas\s+autorizadas/gi, "e comprado na Auto Escola Renacer")
+    .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
+    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+renacer\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados")
+    .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");
+}
+
+function sanitizeAddress(address: string) {
+  return address
+    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
+    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215");
 }
 
 export async function getAiBusinessSettings(): Promise<AiBusinessSettings> {

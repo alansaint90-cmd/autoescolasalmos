@@ -98,12 +98,8 @@ export async function POST(request: NextRequest) {
       severity: "info",
       message: "Mensagem vazia, de tipo ainda nao suportado ou enviada pelo proprio sistema foi ignorada.",
       metadata: {
-        event: body?.event,
-        instance: body?.instance,
         messageType: parsed.data.data.messageType,
-        fromMe: parsed.data.data.key?.fromMe,
-        hasDataMessage: Boolean(parsed.data.data.message),
-        dataKeys: Object.keys(parsed.data.data)
+        fromMe: parsed.data.data.key?.fromMe
       }
     });
     return NextResponse.json({ ignored: true });

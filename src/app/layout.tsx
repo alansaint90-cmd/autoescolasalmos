@@ -3,7 +3,7 @@ import { PwaRegister } from "@/components/pwa-register";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Auto Pro IA Salmos",
+  title: "Auto Pro IA Renacer",
   description: "Atendimento WhatsApp com IA e handoff humano para autoescolas.",
   applicationName: "Auto Pro IA",
   manifest: "/manifest.webmanifest",

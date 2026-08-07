@@ -47,7 +47,7 @@ export default function LoginPage() {
 
           <p className="mt-6 text-center text-sm text-slate-400">
             Novo por aqui?{" "}
-            <Link href="/api/auth/demo" className="font-black text-primary">
+            <Link href="/dashboard" className="font-black text-primary">
               Acessar demo
             </Link>
           </p>

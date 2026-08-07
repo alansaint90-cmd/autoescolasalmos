@@ -24,28 +24,16 @@ const seedUsers = [
     password: "AutoPro@2026Admin"
   },
   {
-    name: "Geane",
-    email: "geane@autopro.ia",
-    role: "gerente",
-    password: "AutoPro@2026Geane"
-  },
-  {
-    name: "Silvio",
-    email: "silvio@autopro.ia",
-    role: "gerente",
-    password: "AutoPro@2026Silvio"
-  },
-  {
-    name: "Atendente 1",
-    email: "atendente1@autopro.ia",
+    name: "Atendente",
+    email: "atendente@autopro.ia",
     role: "atendente",
-    password: "AutoPro@2026Atendente1"
+    password: "AutoPro@2026Atendente"
   },
   {
-    name: "Atendente 2",
-    email: "atendente2@autopro.ia",
+    name: "Sandra",
+    email: "sandra@autopro.ia",
     role: "atendente",
-    password: "AutoPro@2026Atendente2"
+    password: "AutoPro@2026Sandra"
   },
   {
     name: "Ricardo IA",
@@ -53,6 +41,17 @@ const seedUsers = [
     role: "ia",
     password: "AutoPro@2026IA"
   }
+];
+
+const legacySeedUserEmails = [
+  "camila@autopro.ia",
+  "ana@autopro.ia",
+  "aline@autopro.ia",
+  "geane@autopro.ia",
+  "silvio@autopro.ia",
+  "gerente1@autopro.ia",
+  "atendente1@autopro.ia",
+  "atendente2@autopro.ia"
 ];
 
 async function hashPassword(password) {
@@ -154,6 +153,17 @@ async function main() {
           modified_by = excluded.modified_by
       `;
     }
+
+    await sql`
+      update users
+      set
+        is_deleted = true,
+        deleted_at = coalesce(deleted_at, ${now}),
+        updated_at = ${now},
+        modified_by = ${systemUserId}
+      where email in ${sql(legacySeedUserEmails)}
+        and is_deleted = false
+    `;
 
     const rows = await sql`
       select

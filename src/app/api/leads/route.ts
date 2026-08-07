@@ -30,6 +30,8 @@ const uiToDbStage: Record<string, string> = {
   fechado: "fechado"
 };
 
+const MANUAL_CONTACT_TAG = "manual_contact";
+
 function normalizeStage(value: unknown): FunnelStage {
   if (typeof value !== "string") return "novo";
   return (uiToDbStage[value] ?? "novo") as FunnelStage;
@@ -192,6 +194,17 @@ export async function PATCH(request: NextRequest) {
     if (body.temperature !== undefined) update.temperature = nonEmptyString(body.temperature) ?? "morno";
     if (body.sentiment !== undefined) update.sentiment = nonEmptyString(body.sentiment) ?? "neutro";
     if (body.commercialStatus !== undefined) update.commercial_status = nonEmptyString(body.commercialStatus) ?? "em_atendimento";
+    if (body.name !== undefined || body.phone !== undefined) {
+      const [currentLead] = await db
+        .select({ tags: leads.tags })
+        .from(leads)
+        .where(eq(leads.id, leadId))
+        .limit(1);
+      const currentTags = Array.isArray(currentLead?.tags) ? currentLead.tags : [];
+      update.tags = currentTags.includes(MANUAL_CONTACT_TAG)
+        ? currentTags
+        : [...currentTags, MANUAL_CONTACT_TAG];
+    }
     const nextStage = body.status !== undefined ? normalizeStage(body.status) : null;
     if (body.lastMessage !== undefined) update.last_message_preview = nonEmptyString(body.lastMessage);
     if (body.status !== undefined || body.lastMessage !== undefined) update.last_interaction_at = new Date();

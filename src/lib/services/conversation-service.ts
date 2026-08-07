@@ -15,6 +15,7 @@ import { describeInboundImage, type ImageDescriptionResult } from "@/lib/service
 import { processAndStoreInboundMedia, type InboundMediaProcessingResult } from "@/lib/services/inbound-media-service";
 import { analyzeAndSavePaymentReceipt, isPotentialPixReceipt } from "@/lib/services/payment-receipt-service";
 import {
+  FOLLOW_UP_ELIGIBLE_TAG,
   pauseLeadFollowUp,
   resetLeadFollowUpOnCustomerReply,
   resumeLeadFollowUp,
@@ -32,6 +33,8 @@ import {
 import { publishRealtimeEvent } from "@/lib/services/realtime";
 import { logSystemEvent } from "@/lib/services/system-event-log-service";
 import type { NormalizedInboundMessage } from "@/lib/whatsapp/normalizer";
+
+const MANUAL_CONTACT_TAG = "manual_contact";
 
 export async function registerInboundMessage(input: NormalizedInboundMessage) {
   await ensureSystemUser();
@@ -76,10 +79,12 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
       .set({
         status: "ai",
         ai_paused_reason: null,
+        deleted_at: null,
+        is_deleted: false,
         updated_at: new Date(),
         modified_by: SYSTEM_USER_ID
       })
-      .where(and(eq(conversations.id, conversation.id), eq(conversations.is_deleted, false)))
+      .where(eq(conversations.id, conversation.id))
       .returning();
 
     if (reactivated) {
@@ -106,7 +111,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
       inbound,
       {
         reason: "Conversa fora da politica de entrada paga. IA pausada porque a primeira mensagem nao corresponde ao gatilho do anuncio.",
-        context: "Politica atual: a IA inicia somente quando a primeira mensagem for: tenho interesse, gostaria de mais informacoes por favor.",
+        context: "Politica atual: a IA inicia quando a primeira mensagem for um gatilho de interesse do anuncio, como: tenho interesse gostaria de mais informacoes.",
         logReason: "Conversa em modo automatico foi pausada porque nao possui a frase inicial validada de trafego pago."
       }
     );
@@ -206,7 +211,9 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
   }
 
   if (!inbound.fromMe) {
-    await resetLeadFollowUpOnCustomerReply(lead.id);
+    if (conversation.status === "ai") {
+      await resetLeadFollowUpOnCustomerReply(lead.id);
+    }
     await moveLeadStage({
       leadId: lead.id,
       toStage: conversation.status === "ai" ? "ia" : "atendimento",
@@ -643,15 +650,6 @@ async function applyCommercialSignal(input: {
     });
   }
 
-  if (input.signal.status === "aguardando_validacao_pagamento") {
-    await sendPaymentReceiptAck({
-      leadId: input.leadId,
-      conversationId: input.conversation.id,
-      phone: input.leadPhone,
-      sourceMessageId: input.messageId
-    });
-  }
-
   await logAiDecision({
     conversationId: input.conversation.id,
     leadId: input.leadId,
@@ -669,50 +667,6 @@ async function applyCommercialSignal(input: {
   });
 
   return conversation;
-}
-
-async function sendPaymentReceiptAck(input: {
-  leadId: string;
-  conversationId: string;
-  phone: string;
-  sourceMessageId: string;
-}) {
-  const text = "Recebi seu comprovante e encaminhei para conferencia. Ja vamos validar para dar continuidade.";
-
-  try {
-    const evolutionResults = normalizeEvolutionSendResults(await sendWhatsAppText({ phone: input.phone, text }));
-    const [aiMessage] = await db
-      .insert(messages)
-      .values({
-        conversation_id: input.conversationId,
-        external_message_id: evolutionResults[0]?.messageId,
-        role: "ai",
-        content: text,
-        metadata: {
-          source: "payment_receipt_ack",
-          sourceMessageId: input.sourceMessageId,
-          evolutionMessageKeys: evolutionResults.map((result) => result.key).filter(Boolean)
-        },
-        modified_by: SYSTEM_USER_ID
-      })
-      .returning();
-
-    await appendRecentConversationContext({
-      conversationId: input.conversationId,
-      messageId: aiMessage.id,
-      role: aiMessage.role,
-      content: aiMessage.content,
-      createdAt: new Date().toISOString()
-    });
-
-    await publishRealtimeEvent({
-      type: "message.created",
-      conversationId: input.conversationId,
-      payload: { message: aiMessage }
-    });
-  } catch (error) {
-    console.warn("[conversation-service] failed to send payment receipt acknowledgement", error);
-  }
 }
 
 function getCommercialNotificationTitle(status: string) {
@@ -897,7 +851,25 @@ export async function processBufferedConversation(conversationId: string) {
   }
 
   console.info("[conversation-service] sending whatsapp reply", { conversationId, phone: lead.phone });
-  const evolutionResults = normalizeEvolutionSendResults(await sendWhatsAppText({ phone: lead.phone, text: cleanReply }));
+  let evolutionResults;
+  try {
+    evolutionResults = normalizeEvolutionSendResults(await sendWhatsAppText({ phone: lead.phone, text: cleanReply }));
+  } catch (error) {
+    await logSystemEvent({
+      source: "conversation-service",
+      event: "ai_reply_whatsapp_send_failed",
+      severity: "error",
+      message: error instanceof Error ? error.message : "Falha ao enviar resposta da IA para o WhatsApp pela Evolution.",
+      leadId: lead.id,
+      conversationId,
+      metadata: {
+        phone: lead.phone.replace(/\d(?=\d{4})/g, "*"),
+        model: env.OPENAI_MODEL,
+        replyPreview: cleanReply.slice(0, 240)
+      }
+    });
+    throw error;
+  }
   console.info("[conversation-service] whatsapp reply sent", { conversationId });
 
   const [aiMessage] = await db
@@ -1122,7 +1094,7 @@ async function upsertLead(input: NormalizedInboundMessage, signal: LeadSignal) {
   const payloadAvatarUrl = !input.fromMe ? input.avatarUrl : undefined;
   const avatarUrl = payloadAvatarUrl ?? await fetchWhatsAppProfilePicture(input.phone);
   const origin = input.marketing?.origin ?? "WhatsApp";
-  const tags = input.marketing?.isAdLead ? ["anuncio", input.marketing.platform ?? "meta"].filter(Boolean) : undefined;
+  const adTags = input.marketing?.isAdLead ? ["anuncio", input.marketing.platform ?? "meta"].filter(Boolean) : undefined;
 
   const [existing] = await db
     .select()
@@ -1138,10 +1110,10 @@ async function upsertLead(input: NormalizedInboundMessage, signal: LeadSignal) {
     const [updated] = await db
       .update(leads)
       .set({
-        name: shouldReplaceLeadName(existing.name, name, input.phone) ? name : existing.name,
+        name: shouldReplaceLeadName(existing.name, name, input.phone, existing.tags) ? name : existing.name,
         avatar_url: shouldReplaceLeadAvatar(existing.avatar_url, avatarUrl) ? avatarUrl : existing.avatar_url,
         origin: input.marketing?.isAdLead ? origin : existing.origin,
-        tags: tags ?? existing.tags,
+        tags: mergeLeadTags(existing.tags, adTags),
         interest: signal.interest ?? existing.interest,
         temperature: signal.temperature,
         sentiment: signal.sentiment,
@@ -1176,12 +1148,48 @@ async function upsertLead(input: NormalizedInboundMessage, signal: LeadSignal) {
       last_message_preview: input.text.slice(0, 280),
       last_interaction_at: now,
       enrollment_closed_at: signal.enrollmentClosedAt,
-      tags: tags ?? [],
+      tags: input.marketing?.isAdLead ? mergeLeadTags(adTags, [FOLLOW_UP_ELIGIBLE_TAG]) : [],
       modified_by: SYSTEM_USER_ID
+    })
+    .onConflictDoUpdate({
+      target: leads.phone,
+      set: {
+        name: name ?? input.phone,
+        avatar_url: avatarUrl,
+        origin,
+        interest: signal.interest,
+        temperature: signal.temperature,
+        sentiment: signal.sentiment,
+        commercial_status: signal.commercialStatus ?? "em_atendimento",
+        pipeline_stage: signal.pipelineStage,
+        last_message_preview: input.text.slice(0, 280),
+        last_interaction_at: now,
+        enrollment_closed_at: signal.enrollmentClosedAt,
+        tags: input.marketing?.isAdLead ? mergeLeadTags(adTags, [FOLLOW_UP_ELIGIBLE_TAG]) : [],
+        deleted_at: null,
+        is_deleted: false,
+        updated_at: now,
+        modified_by: SYSTEM_USER_ID
+      }
     })
     .returning();
 
   return created;
+}
+
+function mergeLeadTags(...tagSources: unknown[]) {
+  const normalized = new Set<string>();
+
+  for (const source of tagSources) {
+    if (!Array.isArray(source)) continue;
+    for (const tag of source) {
+      if (typeof tag !== "string") continue;
+      const cleanTag = tag.trim();
+      if (cleanTag) normalized.add(cleanTag);
+    }
+  }
+
+  return Array.from(normalized);
 }
 
 function getCustomerLeadName(input: NormalizedInboundMessage) {
@@ -1193,8 +1201,9 @@ function getCustomerLeadName(input: NormalizedInboundMessage) {
   return name;
 }
 
-function shouldReplaceLeadName(currentName: string | null | undefined, nextName: string | undefined, phone: string) {
+function shouldReplaceLeadName(currentName: string | null | undefined, nextName: string | undefined, phone: string, tags?: unknown) {
   if (!nextName) return false;
+  if (Array.isArray(tags) && tags.includes(MANUAL_CONTACT_TAG)) return false;
 
   const current = currentName?.trim();
   if (!current) return true;
@@ -1220,9 +1229,9 @@ function isLikelyBusinessProfileName(name: string) {
     .trim();
 
   const businessNames = [
-    "auto escola catuense",
-    "autoescola catuense",
-    "cfc catuense",
+    "auto escola renacer",
+    "autoescola renacer",
+    "cfc renacer",
     "auto pro ia",
     "auto pro ia crm"
   ];
@@ -1232,7 +1241,7 @@ function isLikelyBusinessProfileName(name: string) {
 
 function isLikelyBusinessAvatarUrl(url: string) {
   const normalized = url.toLowerCase();
-  return normalized.includes("autoescola") || normalized.includes("catuense") || normalized.includes("autopro");
+  return normalized.includes("autoescola") || normalized.includes("renacer") || normalized.includes("autopro");
 }
 
 function classifyLeadSignal(text: string): LeadSignal {
@@ -1598,11 +1607,28 @@ async function upsertConversation(leadId: string, externalChatId: string) {
   const [existing] = await db
     .select()
     .from(conversations)
-    .where(and(eq(conversations.external_chat_id, externalChatId), eq(conversations.is_deleted, false)))
+    .where(eq(conversations.external_chat_id, externalChatId))
     .limit(1);
 
   if (existing) {
-    return { conversation: existing, created: false };
+    if (!existing.is_deleted) {
+      return { conversation: existing, created: false };
+    }
+
+    const [reactivated] = await db
+      .update(conversations)
+      .set({
+        lead_id: leadId,
+        status: "ai",
+        deleted_at: null,
+        is_deleted: false,
+        updated_at: new Date(),
+        modified_by: SYSTEM_USER_ID
+      })
+      .where(eq(conversations.id, existing.id))
+      .returning();
+
+    return { conversation: reactivated, created: true };
   }
 
   const [created] = await db

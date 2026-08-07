@@ -21,6 +21,7 @@ type ConversationRow = {
   phone: string | null;
   avatar_url: string | null;
   origin: string | null;
+  tags: unknown;
   temperature: string | null;
   sentiment: string | null;
   commercial_status: string | null;
@@ -42,6 +43,12 @@ type ConversationMessageRow = {
   content: string;
   created_at: Date | string;
   metadata: Record<string, unknown> | null;
+};
+
+type ConversationCountsRow = {
+  all_count: string | number | bigint;
+  ad_count: string | number | bigint;
+  follow_up_count: string | number | bigint;
 };
 
 function formatTime(value: Date | string | null) {
@@ -82,9 +89,9 @@ function isLikelyBusinessProfileName(name: string) {
     .trim();
 
   return [
-    "auto escola catuense",
-    "autoescola catuense",
-    "cfc catuense",
+    "auto escola renacer",
+    "autoescola renacer",
+    "cfc renacer",
     "auto pro ia",
     "auto pro ia crm"
   ].includes(normalized);
@@ -102,6 +109,47 @@ function normalizePipelineStage(stage: string | null | undefined) {
   if (value === "matricula_realizada") return "fechado";
   if (["novo", "ia", "atendimento", "followup", "matricula_pendente", "fechado", "perdido"].includes(value)) return value;
   return "novo";
+}
+
+function normalizeComparable(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function normalizeLeadTags(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0);
+}
+
+function isAdsOrigin(origin: string | null | undefined) {
+  const normalized = normalizeComparable(origin ?? "");
+  return (
+    normalized.includes("meta ads")
+    || normalized.includes("facebook ads")
+    || normalized.includes("instagram ads")
+  );
+}
+
+function isAdLead(origin: string | null | undefined, tagsValue: unknown) {
+  if (isAdsOrigin(origin)) return true;
+
+  const tags = normalizeLeadTags(tagsValue).map(normalizeComparable);
+  return tags.some((tag) => (
+    tag === "anuncio"
+    || tag === "meta"
+    || tag === "meta ads"
+    || tag === "facebook"
+    || tag === "facebook ads"
+    || tag === "instagram"
+    || tag === "instagram ads"
+  ));
+}
+
+function toNumber(value: string | number | bigint | null | undefined) {
+  return Number(value ?? 0);
 }
 
 export async function GET(request: NextRequest) {
@@ -128,6 +176,7 @@ export async function GET(request: NextRequest) {
         l.phone,
         l.avatar_url,
         l.origin,
+        l.tags,
         l.temperature,
         l.sentiment,
         l.commercial_status,
@@ -150,6 +199,63 @@ export async function GET(request: NextRequest) {
 
     const conversationIds = rows.map((row) => row.conversation_id);
     const messagesByConversation = await loadRecentMessagesByConversation(conversationIds, messageLimit);
+    const [counts] = await db.execute<ConversationCountsRow>(sql`
+      select
+        count(*) filter (where c.archived_at is null) as all_count,
+        count(*) filter (
+          where c.archived_at is null
+            and (
+              lower(coalesce(l.origin, '')) like '%meta ads%'
+              or lower(coalesce(l.origin, '')) like '%facebook ads%'
+              or lower(coalesce(l.origin, '')) like '%instagram ads%'
+              or exists (
+                select 1
+                from jsonb_array_elements_text(coalesce(l.tags, '[]'::jsonb)) as tag(value)
+                where lower(tag.value) in (
+                  'anuncio',
+                  'meta',
+                  'meta ads',
+                  'facebook',
+                  'facebook ads',
+                  'instagram',
+                  'instagram ads'
+                )
+              )
+            )
+        ) as ad_count,
+        count(*) filter (
+          where c.archived_at is null
+            and c.status = 'ai'
+            and l.follow_up_paused_at is null
+            and (
+              coalesce(l.follow_up_count, 0) > 0
+              or l.last_follow_up_at is not null
+              or l.next_follow_up_at is not null
+              or l.pipeline_stage = 'followup'
+            )
+            and (
+              lower(coalesce(l.origin, '')) like '%meta ads%'
+              or lower(coalesce(l.origin, '')) like '%facebook ads%'
+              or lower(coalesce(l.origin, '')) like '%instagram ads%'
+              or exists (
+                select 1
+                from jsonb_array_elements_text(coalesce(l.tags, '[]'::jsonb)) as tag(value)
+                where lower(tag.value) in (
+                  'anuncio',
+                  'meta',
+                  'meta ads',
+                  'facebook',
+                  'facebook ads',
+                  'instagram',
+                  'instagram ads'
+                )
+              )
+            )
+        ) as follow_up_count
+      from conversations c
+      inner join leads l on l.id = c.lead_id and l.is_deleted = false
+      where c.is_deleted = false
+    `);
 
     const conversations = rows.map((row) => {
       const phone = row.phone?.trim() || "Contato sem telefone";
@@ -157,6 +263,7 @@ export async function GET(request: NextRequest) {
       const name = rawName && !isLikelyBusinessProfileName(rawName) ? rawName : phone;
       const conversationMessages = messagesByConversation.get(row.conversation_id) ?? [];
       const lastMessage = conversationMessages.at(-1)?.content ?? row.last_message_preview ?? "";
+      const tags = normalizeLeadTags(row.tags);
 
       return {
         id: row.conversation_id,
@@ -170,6 +277,8 @@ export async function GET(request: NextRequest) {
           name,
           phone,
           origin: row.origin ?? "WhatsApp",
+          tags,
+          isAdLead: isAdLead(row.origin, tags),
           temperature: row.temperature ?? "morno",
           commercialStatus: row.commercial_status ?? "em_atendimento",
           lastInteraction: formatTime(row.last_interaction_at ?? row.last_message_at),
@@ -201,7 +310,16 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ ok: true, conversations, count: conversations.length });
+    return NextResponse.json({
+      ok: true,
+      conversations,
+      count: conversations.length,
+      counts: {
+        all: toNumber(counts?.all_count),
+        adLeads: toNumber(counts?.ad_count),
+        followUp: toNumber(counts?.follow_up_count)
+      }
+    });
   } catch (error) {
     console.error("[conversations-api] failed to load conversations", error);
 

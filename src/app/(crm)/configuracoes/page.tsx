@@ -114,8 +114,8 @@ const roles: Array<{
 
 const defaultUsers: UserRecord[] = [
   { initials: "SA", name: "Superadmin", email: "admin@autopro.ia", phone: "+55 75 99999-0001", role: "admin", position: "Dono / gestor", scope: "Todos os leads", status: "Ativo" },
-  { initials: "GV", name: "Carla Vendas", email: "gerente1@autopro.ia", phone: "+55 75 99999-0002", role: "gerente", position: "Gerente", scope: "Todos os leads", status: "Ativo" },
-  { initials: "AT", name: "Julio Operador", email: "atendente1@autopro.ia", phone: "+55 75 99999-0003", role: "sdr", position: "Atendente / SDR", scope: "Somente atribuídos", status: "Ativo" },
+  { initials: "AT", name: "Atendente", email: "atendente@autopro.ia", phone: "+55 75 99999-0002", role: "sdr", position: "Atendente", scope: "Somente atribuídos", status: "Ativo" },
+  { initials: "SA", name: "Sandra", email: "sandra@autopro.ia", phone: "+55 75 99999-0003", role: "sdr", position: "Atendente", scope: "Somente atribuídos", status: "Ativo" },
   { initials: "IA", name: defaultAiBusinessSettings.agentName, email: "ia@autopro.ia", phone: "Sistema", role: "bot", position: "IA", scope: "Sistema", status: "Ativo" }
 ];
 

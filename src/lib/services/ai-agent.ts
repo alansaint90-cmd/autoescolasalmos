@@ -48,7 +48,7 @@ export async function triageInitialConversation(input: GenerateAiReplyInput): Pr
         businessSettings.triagePrompt,
         "",
         "CONTEXTO DINAMICO:",
-        `Empresa: Auto Escola Salmos`,
+        `Empresa: Auto Escola Renacer`,
         `Agente IA: ${businessSettings.agentName}`,
         `Endereco: ${businessSettings.address}`,
         `Horario: ${businessSettings.hours}`,
@@ -96,7 +96,7 @@ export async function generateAiReply(input: GenerateAiReplyInput): Promise<AiRe
   if (safety.status === "blocked") {
     const safeText = [
       "Para nao te passar uma informacao comercial incorreta, vou confirmar esse detalhe com um atendente.",
-      "Um especialista do Auto Escola Salmos vai assumir para seguir com seguranca."
+      "Um especialista do Auto Escola Renacer vai assumir para seguir com seguranca."
     ].join(" ");
 
     console.warn("[ai-agent] response blocked by safety guard", {
@@ -176,11 +176,40 @@ export async function generateAiFollowUp(input: GenerateFollowUpInput) {
     .join("\n");
 
   const followUpGuides: Record<number, string> = {
-    1: "Confirmar recebimento da informacao e abrir espaco para duvida.",
-    2: "Retomar interesse em iniciar a habilitacao.",
-    3: "Gerar urgencia leve sobre condicoes atuais de matricula.",
-    4: "Recuperar lead morno e deixar orcamento atualizado.",
-    5: "Ultima tentativa educada, sem incomodar, abrindo porta para retorno."
+    1: [
+      "FOLLOW-UP 2 HORAS.",
+      "Objetivo: retomar a conversa com contexto e manter o lead aquecido.",
+      "Analise a ultima conversa e continue exatamente do ponto onde parou, de forma natural.",
+      "Nao reinicie o atendimento do zero.",
+      "Exemplo de direcao: 'Oi, passando para continuar nosso atendimento. Vi que voce estava olhando sobre sua habilitacao. Quer que eu te explique melhor ou tirar alguma duvida?'",
+      "Se houver contexto especifico da conversa, use esse contexto."
+    ].join(" "),
+    2: [
+      "FOLLOW-UP 24 HORAS.",
+      "Objetivo: descobrir objecoes ou dificuldades.",
+      "Mensagem base: 'Ficou alguma duvida ou alguma dificuldade para dar continuidade? Se quiser, posso te ajudar e explicar melhor.'",
+      "Objetivo principal: identificar o que esta travando a decisao.",
+      "Se houver objecao ja aparente no contexto, trabalhe a objecao imediatamente."
+    ].join(" "),
+    3: [
+      "FOLLOW-UP 72 HORAS.",
+      "Objetivo: gerar confianca usando prova social.",
+      "Mensagem base: 'Essa semana tivemos varios alunos iniciando o processo e aproveitando essa condicao. Se quiser, ainda consigo verificar essa oportunidade para voce.'",
+      "Objetivo principal: mostrar movimento, gerar seguranca e reforcar credibilidade."
+    ].join(" "),
+    4: [
+      "FOLLOW-UP 7 DIAS.",
+      "Objetivo: criar reativacao com oferta especial.",
+      "Mensagem base: 'Consegui manter uma condicao especial para novas matriculas essa semana. Se ainda tiver interesse, posso verificar para voce.'",
+      "Objetivo principal: gerar urgencia e reabrir a negociacao."
+    ].join(" "),
+    5: [
+      "FOLLOW-UP 15 DIAS.",
+      "Objetivo: ultima tentativa de recuperacao.",
+      "Mensagem base: 'Ainda tem interesse em tirar sua habilitacao? Se tiver, consigo manter aquela condicao especial para voce.'",
+      "Se o lead responder positivamente depois desta mensagem, retomar imediatamente o fluxo comercial com urgencia, oferta e fechamento.",
+      "Se o lead responder negativamente depois desta mensagem, encerrar com educacao: 'Perfeito. Se no futuro precisar, pode me chamar. Vou estar a disposicao.'"
+    ].join(" ")
   };
 
   const { text } = await generateText({
@@ -194,7 +223,16 @@ export async function generateAiFollowUp(input: GenerateFollowUpInput) {
       `Objetivo deste follow-up: ${followUpGuides[input.followUpNumber] ?? followUpGuides[5]}`,
       "Conversa recente:",
       conversationText,
-      "Crie UMA mensagem curta de WhatsApp, com contexto real da conversa. Nao diga que e automacao. Nao reabra assuntos que o cliente ja resolveu. No maximo uma pergunta. Nao use |||SPLIT||| em follow-up."
+      [
+        "Crie UMA mensagem curta de WhatsApp, com contexto real da conversa.",
+        "Nao diga que e automacao.",
+        "Nao reinicie o atendimento do zero.",
+        "Nao reabra assuntos que o cliente ja resolveu.",
+        "Nunca pareca insistente; pareca util, consultivo e natural.",
+        "Cada follow-up precisa buscar evolucao da conversa rumo a matricula.",
+        "No maximo uma pergunta.",
+        "Nao use |||SPLIT||| em follow-up."
+      ].join(" ")
     ].filter(Boolean).join("\n")
   });
 
@@ -208,7 +246,7 @@ type BusinessSettings = Awaited<ReturnType<typeof getAiBusinessSettings>>;
 function buildSystemPrompt(settings: BusinessSettings) {
   const dynamicContext = [
     `Agente IA configurado: ${settings.agentName}`,
-    "Empresa: Auto Escola Salmos",
+    "Empresa: Auto Escola Renacer",
     `Endereco: ${settings.address}`,
     `Horario de atendimento: ${settings.hours}`,
     "Precos, planos e regras comerciais:",
@@ -225,7 +263,7 @@ function buildSystemPrompt(settings: BusinessSettings) {
 
   const basePrompt = settings.sdrPrompt
     .replaceAll("{{agentName}}", settings.agentName)
-    .replaceAll("{{companyName}}", "Auto Escola Salmos")
+    .replaceAll("{{companyName}}", "Auto Escola Renacer")
     .replaceAll("{{dynamicContext}}", dynamicContext);
 
   return [
@@ -238,12 +276,17 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Nunca invente preco, taxa, desconto, prazo, data, documento obrigatorio ou condicao de pagamento.",
     "- Se o preco, prazo ou regra nao estiver exatamente no contexto dinamico, diga que vai confirmar com um atendente humano.",
     "- Use somente valores em reais, parcelamentos, taxas, endereco, horarios e regras cadastrados no contexto dinamico.",
-    "- REGRA FIXA AUTO ESCOLA SALMOS SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
-    "- O fluxo correto e: o laudo e comprado na propria Auto Escola Salmos. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
+    "- REGRA FIXA AUTO ESCOLA RENACER SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
+    "- O fluxo correto e: o laudo e comprado na propria Auto Escola Renacer. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
     "- Exame medico e avaliacao psicologica sao feitos em clinicas credenciadas. Explique assim: 'Voce compra o laudo conosco e nele ja constam as clinicas credenciadas para realizar os exames.'",
+    "- Atendimento PCD: a Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados. Nunca informe que atende PCD, aula adaptada ou veiculo adaptado.",
     "- Primeira CNH A, B ou AB: requisitos basicos sao ter 18 anos ou mais, saber ler e escrever, RG e CPF validos e comprovante de residencia atualizado dos ultimos 3 meses.",
     "- Documentos basicos: RG original e recente, CPF e comprovante de residencia atualizado, como conta de agua, luz ou telefone, dos ultimos 3 meses.",
-    "- Primeira habilitacao A/B/AB segue: comprar laudo na Auto Escola Salmos, fazer exames indicados no laudo, curso teorico na CFC, prova teorica do Detran, aulas praticas, prova pratica e emissao da CNH.",
+    "- Primeira habilitacao A/B/AB segue: comprar laudo na Auto Escola Renacer, fazer exames indicados no laudo, curso teorico online e gratuito pela plataforma CNH do Brasil, prova teorica do Detran, aulas praticas, prova pratica e emissao da CNH.",
+    "- Curso teorico: nunca diga que ha turma, horario fixo, duracao por aula ou limite de tempo. O correto e: plataforma CNH do Brasil, 100% online e gratuita; o aluno faz conforme sua disponibilidade, basta baixar o aplicativo. A Auto Escola Renacer da suporte no acesso e envia material complementar de estudo.",
+    "- Atendimento regional: a Auto Escola Renacer fica em Catu - Bahia. Todas as aulas, etapas presenciais e atendimento da autoescola acontecem em Catu, na Auto Escola Renacer.",
+    "- Alagoinhas, Pojuca e Sao Sebastiao sao cidades proximas atendidas comercialmente; alunos dessas cidades podem se deslocar ate Catu para tirar a habilitacao. Nunca diga que ha aulas, curso presencial, prova ou atendimento da CFC em Alagoinhas, Pojuca ou Sao Sebastiao.",
+    "- Bairro nao e informacao relevante para o atendimento. Nunca pergunte em qual bairro o cliente mora, nunca pergunte em qual bairro ele prefere fazer aulas e nunca sugira escolha de bairro para aula. O aluno nao escolhe bairro: todas as aulas iniciam na autoescola em Catu.",
     "- Nao informe toxicologico para primeira habilitacao A ou B.",
     "- Adicao A/B exige CNH regular, nao suspensa nem cassada; se exames ainda estiverem validos e sem restricao, diga que pode nao precisar refazer, mas precisa confirmar no atendimento da CFC/Detran.",
     "- Mudanca D/E exige pelo menos 21 anos, requisitos de tempo de categoria, exame toxicologico em laboratorio credenciado pela Senatran, exames medicos, aulas praticas e prova pratica.",
@@ -257,7 +300,10 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "💰 A vista: R$ 380,00",
     "💳 A prazo: R$ 448,40",
     "- Troque categoria, veiculo, nome do plano, quantidade de aulas e valores conforme os dados cadastrados no contexto dinamico.",
-    "- Quando o cliente pedir valor total, voce pode calcular e informar o total inicial somando plano escolhido + matricula + laudo + exame cadastrados. Discrimine a soma e nao inclua exame pratico, salvo se o cliente pedir total com exame pratico.",
+    "- Quando o cliente pedir valor, custo, investimento ou valor total, apresente a visao completa: laudo + exames medico/avaliacao psicologica + aulas praticas + exames praticos, calculando o total inicial quando os valores estiverem no contexto dinamico. Nao responda apenas com o valor das aulas.",
+    "- Modelo obrigatorio quando o cliente pedir investimento resumido da PRIMEIRA CNH AB no plano Basico: '📌 PRIMEIRA CNH – CATEGORIA AB (MOTO + CARRO)\\n💰 Investimento (resumido):\\n🔹 Taxas do Detran\\n• Laudo: R$ 180,00\\n• Exames (médico + avaliação psicológica): R$ 180,00\\n🔹 Aulas práticas:\\n• Moto (2 aulas): R$ 260,00\\n• Carro (2 aulas): R$ 380,00\\n🔹 Exames práticos:\\n• Moto: R$ 100,00\\n• Carro: R$ 165,00\\n📌 Total inicial: R$ 1.265,00'. Para A ou B, adapte os itens e a soma usando os valores cadastrados.",
+    "- Sempre que falar de curso teorico ou custos do processo, informe que o curso teorico e gratuito pela plataforma CNH do Brasil.",
+    "- Depois de identificar a experiencia do cliente, sugira a quantidade de aulas praticas de forma consultiva: mais aulas para iniciante/inseguro, Basico ou Intermediario para quem ja tem nocao ou quer algo enxuto.",
     "- Se o cliente pedir desconto, abatimento, melhor valor, condicao especial ou negociacao, nao negocie automaticamente. Diga que vai chamar uma atendente para verificar a melhor condicao e acione handoff humano.",
     "- Apresente somente a categoria/plano relevante ao pedido do cliente; nao envie todos os planos de uma vez, salvo se o cliente pedir comparacao.",
     "- Nunca encerre um lead apos orcamento ou agendamento nao confirmado.",
@@ -321,11 +367,32 @@ function normalizeMatches(values: string[] | null) {
 }
 
 function sanitizeAiOutput(text: string) {
-  return text
+  const sanitized = text
     .replace(/laudo\s+psicot[eé]cnico/gi, "laudo")
     .replace(/laudo\s+psicol[oó]gico/gi, "laudo")
     .replace(/\bpsicot[eé]cnico\b/gi, "avaliacao psicologica")
-    .replace(/\bpsicoteste\b/gi, "avaliacao psicologica");
+    .replace(/\bpsicoteste\b/gi, "avaliacao psicologica")
+    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
+    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
+    .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
+    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+renacer\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados")
+    .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");
+  return removeNeighborhoodPrompt(sanitized);
+}
+
+function removeNeighborhoodPrompt(text: string) {
+  if (!/\bbairro\b/i.test(text)) return text;
+
+  const cleaned = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((sentence) => !/\bbairro\b/i.test(sentence))
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (cleaned.length >= 20) return cleaned;
+
+  return "Todas as aulas iniciam na Auto Escola Renacer, em Catu. Me diga apenas qual turno fica melhor para voce: manha ou tarde?";
 }
 
 function buildAllowedComputedTotals(allowedMoney: string[]) {

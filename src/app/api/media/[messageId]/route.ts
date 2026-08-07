@@ -12,7 +12,7 @@ type RouteContext = {
   params: Promise<{ messageId: string }>;
 };
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const session = await getSession();
     await assertPermission(session.role, "viewLeads");
@@ -33,23 +33,20 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     if (media.storageKey) {
       const object = await getMediaFromMinio(media.storageKey);
-      return new NextResponse(object.body, {
-        headers: {
-          "Content-Type": object.contentType || media.mimeType || "application/octet-stream",
-          "Cache-Control": "private, max-age=300",
-          ...(object.contentLength ? { "Content-Length": object.contentLength } : {})
-        }
+      return buildMediaResponse(object.body, {
+        contentType: object.contentType || media.mimeType || "application/octet-stream",
+        rangeHeader: request.headers.get("range"),
+        maxAge: 300
       });
     }
 
     const inline = media.dataUrl || media.base64;
     if (inline) {
       const { buffer, mimeType } = decodeInlineMedia(inline, media.mimeType);
-      return new NextResponse(buffer, {
-        headers: {
-          "Content-Type": mimeType,
-          "Cache-Control": "private, max-age=120"
-        }
+      return buildMediaResponse(buffer, {
+        contentType: mimeType,
+        rangeHeader: request.headers.get("range"),
+        maxAge: 120
       });
     }
 
@@ -59,6 +56,81 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const status = message.toLowerCase().includes("sessao") || message.toLowerCase().includes("permiss") ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+function buildMediaResponse(
+  body: ArrayBuffer | Buffer,
+  input: {
+    contentType: string;
+    rangeHeader: string | null;
+    maxAge: number;
+  }
+) {
+  const buffer = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  const total = buffer.byteLength;
+  const commonHeaders = {
+    "Accept-Ranges": "bytes",
+    "Content-Type": input.contentType,
+    "Cache-Control": `private, max-age=${input.maxAge}`
+  };
+
+  if (!input.rangeHeader) {
+    return new NextResponse(toResponseBody(buffer), {
+      headers: {
+        ...commonHeaders,
+        "Content-Length": String(total)
+      }
+    });
+  }
+
+  const range = parseByteRange(input.rangeHeader, total);
+  if (!range) {
+    return new NextResponse(null, {
+      status: 416,
+      headers: {
+        ...commonHeaders,
+        "Content-Range": `bytes */${total}`
+      }
+    });
+  }
+
+  const chunk = buffer.subarray(range.start, range.end + 1);
+  return new NextResponse(toResponseBody(chunk), {
+    status: 206,
+    headers: {
+      ...commonHeaders,
+      "Content-Length": String(chunk.byteLength),
+      "Content-Range": `bytes ${range.start}-${range.end}/${total}`
+    }
+  });
+}
+
+function toResponseBody(buffer: Buffer) {
+  const output = new ArrayBuffer(buffer.byteLength);
+  new Uint8Array(output).set(buffer);
+  return output;
+}
+
+function parseByteRange(value: string, total: number) {
+  const match = value.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || total <= 0) return null;
+
+  const [, startValue, endValue] = match;
+  let start = startValue ? Number.parseInt(startValue, 10) : 0;
+  let end = endValue ? Number.parseInt(endValue, 10) : total - 1;
+
+  if (!startValue && endValue) {
+    const suffixLength = Number.parseInt(endValue, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(total - suffixLength, 0);
+    end = total - 1;
+  }
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start < 0 || start >= total || end < start) return null;
+
+  end = Math.min(end, total - 1);
+  return { start, end };
 }
 
 function getMediaMetadata(metadata: Record<string, unknown> | null | undefined) {

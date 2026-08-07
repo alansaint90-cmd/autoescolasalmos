@@ -3,7 +3,6 @@ import { z } from "zod";
 export const evolutionWebhookSchema = z.object({
   event: z.string().min(1),
   instance: z.string().min(1).optional(),
-  message: z.unknown().optional(),
   data: z.object({
     key: z.object({
       id: z.string().min(1).optional(),
@@ -14,10 +13,7 @@ export const evolutionWebhookSchema = z.object({
     profilePictureUrl: z.string().optional(),
     profilePicUrl: z.string().optional(),
     picture: z.string().optional(),
-    message: z.unknown().optional(),
-    body: z.string().optional(),
-    text: z.string().optional(),
-    caption: z.string().optional(),
+    message: z.record(z.string(), z.unknown()).optional(),
     messageType: z.string().optional(),
     messageTimestamp: z.number().optional()
   }).passthrough()

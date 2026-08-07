@@ -1,5 +1,5 @@
 {
-  "name": "auto-pro-ia-salmos",
+  "name": "auto-pro-ia-renacer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
     "db:seed:dashboard": "node scripts/seed-dashboard-dates.mjs",
     "db:cleanup:fake-leads": "node scripts/cleanup-fake-leads.mjs",
     "db:reset:conversations": "node scripts/reset-conversations.mjs",
+    "db:pause:legacy-followups": "node scripts/pause-legacy-follow-ups.mjs",
     "db:backup": "node scripts/backup-postgres.mjs"
   },
   "dependencies": {

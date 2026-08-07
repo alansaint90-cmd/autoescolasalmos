@@ -2,20 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Bot, LogOut, Search, UserRound, X } from "lucide-react";
+import { Bot, LogOut, Search, UserRound } from "lucide-react";
 
 const COMPANY_PROFILE_STORAGE_KEY = "auto-pro-ia:company-profile";
-
-type TopbarNotification = {
-  id: string;
-  title: string;
-  description: string;
-  time: string;
-  icon: typeof Bot;
-  tone: string;
-};
-
-const fallbackNotifications: TopbarNotification[] = [];
 
 const emptyLead = {
   name: "",
@@ -55,17 +44,6 @@ function initialsFromName(name: string) {
     .toUpperCase();
 }
 
-function formatNotificationTime(value?: string) {
-  if (!value) return "agora";
-  const diffMs = Date.now() - new Date(value).getTime();
-  const minutes = Math.max(0, Math.floor(diffMs / 60000));
-  if (minutes < 1) return "agora";
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h`;
-  return `${Math.floor(hours / 24)} d`;
-}
-
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 6_000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -90,43 +68,9 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
   const hasInteractiveSearch = typeof onSearchChange === "function";
   const [globalSearch, setGlobalSearch] = useState("");
   const [showFallbackModal, setShowFallbackModal] = useState(false);
-  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(defaultCompanyProfile);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [leadDraft, setLeadDraft] = useState(emptyLead);
-  const [notifications, setNotifications] = useState<TopbarNotification[]>(fallbackNotifications);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadNotifications() {
-      try {
-        const response = await fetchWithTimeout("/api/notifications", { cache: "no-store" });
-        if (!response.ok) return;
-        const payload = await response.json() as {
-          notifications?: Array<{ id: string; title: string; description: string; createdAt?: string }>;
-        };
-        if (cancelled) return;
-        setNotifications((payload.notifications ?? []).map((notification) => ({
-          id: notification.id,
-          title: notification.title,
-          description: notification.description,
-          time: formatNotificationTime(notification.createdAt),
-          icon: Bot,
-          tone: "text-primary"
-        })));
-      } catch {
-        if (!cancelled) setNotifications(fallbackNotifications);
-      }
-    }
-
-    loadNotifications();
-    const interval = window.setInterval(loadNotifications, 30000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
 
   useEffect(() => {
     function loadCompanyProfile() {
@@ -311,59 +255,6 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
               </div>
             </div>
           </div>
-          <div className="group/notifications relative">
-            <button
-              type="button"
-              onClick={() => setShowNotificationsModal(true)}
-              aria-label="Abrir notificacoes"
-              className="ap-button-ghost relative grid size-10 place-items-center rounded-2xl text-primary transition duration-200 hover:-translate-y-0.5 active:translate-y-0"
-            >
-              <Bell className="size-4" />
-              {notifications.length > 0 ? (
-                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-danger" />
-              ) : null}
-            </button>
-
-            <div className="pointer-events-none absolute right-0 top-10 z-[120] w-80 translate-y-2 pt-2 opacity-0 transition-all duration-200 group-hover/notifications:pointer-events-auto group-hover/notifications:translate-y-0 group-hover/notifications:opacity-100">
-              <div className="rounded-2xl border border-white/10 bg-[#0B1120]/[0.98] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.54)] backdrop-blur-xl">
-                <div className="mb-2 flex items-center justify-between px-1">
-                  <p className="text-sm font-bold">Notificacoes</p>
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
-                    {notifications.length} novas
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {notifications.length === 0 ? (
-                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] p-3 text-xs leading-5 text-muted-foreground">
-                      Sem notificacoes reais no momento.
-                    </div>
-                  ) : notifications.slice(0, 3).map((notification) => {
-                    const Icon = notification.icon;
-
-                    return (
-                      <button
-                        key={notification.id}
-                        type="button"
-                        onClick={() => setShowNotificationsModal(true)}
-                        className="flex w-full items-start gap-3 rounded-xl p-2 text-left transition hover:bg-white/[0.055]"
-                      >
-                        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/[0.055]">
-                          <Icon className={`size-4 ${notification.tone}`} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-bold">{notification.title}</span>
-                          <span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-muted-foreground">
-                            {notification.description}
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-[10px] font-semibold text-muted-foreground">{notification.time}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
           <div className="group/profile relative">
             <button
               type="button"
@@ -540,56 +431,6 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
         </div>
       ) : null}
 
-      {showNotificationsModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <section className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-card shadow-[0_28px_90px_rgba(0,0,0,0.48)]">
-            <div className="flex items-start gap-4 border-b border-white/10 p-5">
-              <div>
-                <h2 className="text-lg font-bold">Notificacoes</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Atualizacoes recentes do atendimento e vendas.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowNotificationsModal(false)}
-                className="ml-auto grid size-9 place-items-center rounded-xl text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground"
-                aria-label="Fechar notificacoes"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="max-h-[62vh] space-y-2 overflow-y-auto p-4 scrollbar-thin">
-              {notifications.length === 0 ? (
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-5 text-sm text-muted-foreground">
-                  Nenhuma notificacao real registrada agora.
-                </div>
-              ) : notifications.map((notification) => {
-                const Icon = notification.icon;
-
-                return (
-                  <article
-                    key={notification.id}
-                    className="flex items-start gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-white/[0.055]"
-                  >
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-white/[0.055]">
-                      <Icon className={`size-5 ${notification.tone}`} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-bold leading-5">{notification.title}</h3>
-                        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.045] px-2.5 py-1 text-xs font-bold text-muted-foreground">
-                          {notification.time}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{notification.description}</p>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      ) : null}
     </>
   );
 }

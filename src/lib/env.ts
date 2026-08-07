@@ -40,7 +40,7 @@ const envSchema = z.object({
   EVOLUTION_INSTANCE_NAME: z.string().min(1).default("auto-pro-ia"),
   EVOLUTION_WEBHOOK_SECRET: optionalString,
   FOLLOW_UP_JOB_SECRET: optionalString,
-  FOLLOW_UP_AUTOMATION_ENABLED: booleanFromEnv(false),
+  FOLLOW_UP_AUTOMATION_ENABLED: booleanFromEnv(true),
   INTERNAL_WHATSAPP_NOTIFICATIONS_ENABLED: booleanFromEnv(false),
   NOTIFICATION_WHATSAPP_NUMBERS: optionalString,
   SUPPORT_WHATSAPP_NUMBER: optionalString,

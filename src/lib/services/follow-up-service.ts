@@ -35,6 +35,8 @@ const followUpScheduleHours: Record<number, number> = {
   5: 360
 };
 
+export const FOLLOW_UP_ELIGIBLE_TAG = "followup_eligible";
+
 let lastBackgroundFollowUpRunAt = 0;
 let backgroundFollowUpPromise: Promise<unknown> | null = null;
 
@@ -101,6 +103,7 @@ export async function scheduleLeadFollowUp(leadId: string, from = new Date()) {
       modified_by = ${SYSTEM_USER_ID}
     where id = ${leadId}
       and is_deleted = false
+      and ${eligibleAdLeadSqlCondition()}
       and pipeline_stage not in ('fechado', 'perdido', 'matricula_pendente')
   `);
 }
@@ -135,6 +138,7 @@ export async function resumeLeadFollowUp(leadId: string, userId = SYSTEM_USER_ID
       modified_by = ${userId}
     where id = ${leadId}
       and is_deleted = false
+      and ${eligibleAdLeadSqlCondition()}
       and pipeline_stage not in ('fechado', 'perdido', 'matricula_pendente')
   `);
 }
@@ -177,6 +181,8 @@ export async function processDueFollowUps(limit = 25) {
       results: []
     };
   }
+
+  await pauseLegacyFollowUpsForSafety();
 
   const dueLeads = await queryDueFollowUps(safeLimit);
 
@@ -271,8 +277,13 @@ async function queryDueFollowUps(limit: number) {
     from leads l
     inner join conversations c on c.lead_id = l.id and c.is_deleted = false
     where l.is_deleted = false
-      and c.status in ('ai', 'human')
+      and c.status = 'ai'
       and l.follow_up_paused_at is null
+      and ${eligibleAdLeadSqlCondition()}
+      and (
+        coalesce(l.follow_up_count, 0) > 0
+        or l.created_at >= now() - interval '3 days'
+      )
       and (
         (l.next_follow_up_at is not null and l.next_follow_up_at <= now())
         or (
@@ -342,18 +353,25 @@ export async function sendFollowUpNow(leadId: string) {
     inner join conversations c on c.lead_id = l.id and c.is_deleted = false
     where l.id = ${leadId}
       and l.is_deleted = false
+      and c.status = 'ai'
+      and l.follow_up_paused_at is null
+      and ${eligibleAdLeadSqlCondition()}
     order by c.last_message_at desc
     limit 1
   `);
 
   if (!target) {
-    throw new Error("Lead ou conversa nao encontrado para follow-up.");
+    throw new Error("Lead novo de anuncio em modo automatico nao encontrado para follow-up.");
   }
 
   return sendFollowUpForConversation(target);
 }
 
 async function sendFollowUpForConversation(target: DueFollowUpRow) {
+  if (target.conversation_status !== "ai" || target.follow_up_paused_at) {
+    throw new Error("Follow-up bloqueado: conversa nao esta em modo automatico da IA.");
+  }
+
   const followUpNumber = Math.min(Number(target.follow_up_count ?? 0) + 1, 5);
   const recentContext = await getContext(target.conversation_id);
   const lastContactAt = target.last_interaction_at ?? target.last_message_at;
@@ -475,6 +493,76 @@ async function sendFollowUpForConversation(target: DueFollowUpRow) {
     nextFollowUpAt,
     message: cleanReply
   };
+}
+
+async function pauseLegacyFollowUpsForSafety() {
+  const paused = await db.execute<{ id: string }>(sql`
+    update leads
+    set
+      next_follow_up_at = null,
+      follow_up_paused_at = coalesce(follow_up_paused_at, now()),
+      updated_at = now(),
+      modified_by = ${SYSTEM_USER_ID}
+    where is_deleted = false
+      and follow_up_paused_at is null
+      and (
+        next_follow_up_at is not null
+        or coalesce(follow_up_count, 0) > 0
+        or pipeline_stage = 'followup'
+      )
+      and not ${followUpEligibleSqlCondition()}
+    returning id
+  `);
+
+  if (paused.length > 0) {
+    await logSystemEvent({
+      source: "follow-up-job",
+      event: "legacy_follow_ups_paused",
+      severity: "info",
+      message: `${paused.length} follow-up(s) antigo(s) pausado(s) por nao terem elegibilidade de lead novo de anuncio.`,
+      metadata: {
+        pausedLeadIds: paused.map((lead) => lead.id),
+        requiredTag: FOLLOW_UP_ELIGIBLE_TAG
+      }
+    });
+  }
+}
+
+function eligibleAdLeadSqlCondition() {
+  return sql`(${adLeadSqlCondition()} and ${followUpEligibleSqlCondition()})`;
+}
+
+function adLeadSqlCondition() {
+  return sql`
+    (
+      lower(coalesce(origin, '')) like '%meta ads%'
+      or lower(coalesce(origin, '')) like '%facebook ads%'
+      or lower(coalesce(origin, '')) like '%instagram ads%'
+      or exists (
+        select 1
+        from jsonb_array_elements_text(coalesce(tags, '[]'::jsonb)) as tag(value)
+        where lower(tag.value) in (
+          'anuncio',
+          'meta',
+          'meta ads',
+          'facebook',
+          'facebook ads',
+          'instagram',
+          'instagram ads'
+        )
+      )
+    )
+  `;
+}
+
+function followUpEligibleSqlCondition() {
+  return sql`
+    exists (
+      select 1
+      from jsonb_array_elements_text(coalesce(tags, '[]'::jsonb)) as tag(value)
+      where lower(tag.value) = ${FOLLOW_UP_ELIGIBLE_TAG}
+    )
+  `;
 }
 
 function toDbTimestamp(value: Date | null | undefined) {
