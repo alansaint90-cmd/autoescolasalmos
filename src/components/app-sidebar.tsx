@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
+  Building2,
   ClipboardList,
   KanbanSquare,
   LayoutDashboard,
@@ -21,6 +22,7 @@ const items = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/conversas", label: "Conversas", icon: MessageSquareText, badge: 4 },
   { href: "/leads", label: "Leads", icon: Users },
+  { href: "/clientes", label: "Clientes", icon: Building2 },
   { href: "/relatorios", label: "Relatorios", icon: BarChart3 },
   { href: "/analise", label: "Analise", icon: ClipboardList },
   { href: "/configuracoes", label: "Configuracoes", icon: Settings }

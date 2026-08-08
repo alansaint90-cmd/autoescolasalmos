@@ -15,6 +15,7 @@ export const roleEnum = pgEnum("role", ["super_admin", "admin", "gerente", "aten
 export const conversationStatusEnum = pgEnum("conversation_status", ["ai", "human", "paused", "closed"]);
 export const messageRoleEnum = pgEnum("message_role", ["lead", "ai", "human", "system"]);
 export const channelEnum = pgEnum("channel", ["whatsapp"]);
+export const onboardingStatusEnum = pgEnum("onboarding_status", ["not_sent", "waiting", "in_progress", "completed"]);
 
 const baseAuditColumns = {
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -38,6 +39,48 @@ export const users = pgTable("users", {
   ...baseAuditColumns,
   modified_by: uuid("modified_by").notNull()
 });
+
+export const clients = pgTable(
+  "clients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    contact_name: text("contact_name"),
+    contact_email: text("contact_email"),
+    contact_phone: text("contact_phone"),
+    notes: text("notes"),
+    onboarding_status: onboardingStatusEnum("onboarding_status").notNull().default("not_sent"),
+    onboarding_completed_at: timestamp("onboarding_completed_at", { withTimezone: true }),
+    ...baseAuditColumns,
+    modified_by: uuid("modified_by").notNull()
+  },
+  (table) => ({
+    nameIdx: index("clients_name_idx").on(table.name),
+    statusIdx: index("clients_onboarding_status_idx").on(table.is_deleted, table.onboarding_status)
+  })
+);
+
+export const clientOnboardings = pgTable(
+  "client_onboardings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    client_id: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+    token_hash: text("token_hash").notNull(),
+    status: onboardingStatusEnum("status").notNull().default("waiting"),
+    responses: jsonb("responses").$type<Record<string, unknown>>().notNull().default({}),
+    files: jsonb("files").$type<Array<Record<string, unknown>>>().notNull().default([]),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    last_saved_at: timestamp("last_saved_at", { withTimezone: true }),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+    ...baseAuditColumns,
+    modified_by: uuid("modified_by").notNull()
+  },
+  (table) => ({
+    clientIdx: index("client_onboardings_client_idx").on(table.client_id, table.is_deleted),
+    statusIdx: index("client_onboardings_status_idx").on(table.status),
+    tokenIdx: uniqueIndex("client_onboardings_token_hash_unique_idx").on(table.token_hash)
+  })
+);
 
 export const leads = pgTable(
   "leads",
