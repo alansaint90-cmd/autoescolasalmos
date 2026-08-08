@@ -2,7 +2,7 @@
   "name": "Auto Pro IA",
   "short_name": "Auto Pro IA",
   "description": "CRM inteligente com IA para atendimento comercial de autoescolas.",
-  "id": "/dashboard",
+  "id": "/",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
