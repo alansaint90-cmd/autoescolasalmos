@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronLeft, FileUp, Loader2, Save, Sparkles } from "lucide-react";
 import { useParams } from "next/navigation";
-import { OpenInAppButton } from "@/components/open-in-app-button";
 import { onboardingSections } from "@/lib/onboarding-schema";
 import { cn } from "@/lib/utils";
 
@@ -130,12 +129,9 @@ export default function PublicOnboardingPage() {
             </div>
             <p className="mt-1 truncate text-xs font-semibold text-slate-400">{clientName}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden items-center gap-2 text-xs font-bold text-slate-400 sm:flex">
-              <Sparkles className="size-4 text-primary" />
-              Onboarding por link
-            </div>
-            <OpenInAppButton />
+          <div className="hidden items-center gap-2 text-xs font-bold text-slate-400 sm:flex">
+            <Sparkles className="size-4 text-primary" />
+            Onboarding por link
           </div>
         </div>
       </header>

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bot, LogOut, Search, UserRound } from "lucide-react";
-import { OpenInAppButton } from "@/components/open-in-app-button";
 
 const COMPANY_PROFILE_STORAGE_KEY = "auto-pro-ia:company-profile";
 
@@ -208,7 +207,7 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
                 value={searchValue ?? ""}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="Buscar leads, conversas, clientes..."
-                className="h-11 w-full rounded-2xl border border-white/10 bg-[#0B1120]/82 pl-10 pr-36 text-sm text-foreground outline-none transition duration-200 placeholder:text-muted-foreground/70 hover:border-white/[0.18] focus:border-primary/55 focus:bg-[#111827] focus:ring-4 focus:ring-primary/10"
+                className="h-11 w-full rounded-2xl border border-white/10 bg-[#0B1120]/82 pl-10 pr-4 text-sm text-foreground outline-none transition duration-200 placeholder:text-muted-foreground/70 hover:border-white/[0.18] focus:border-primary/55 focus:bg-[#111827] focus:ring-4 focus:ring-primary/10"
               />
             ) : (
               <input
@@ -220,10 +219,9 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
                   }
                 }}
                 placeholder="Buscar leads, conversas, clientes..."
-                className="h-11 w-full rounded-2xl border border-white/10 bg-[#0B1120]/82 pl-10 pr-36 text-sm text-foreground outline-none transition duration-200 placeholder:text-muted-foreground/70 hover:border-white/[0.18] focus:border-primary/55 focus:bg-[#111827] focus:ring-4 focus:ring-primary/10"
+                className="h-11 w-full rounded-2xl border border-white/10 bg-[#0B1120]/82 pl-10 pr-4 text-sm text-foreground outline-none transition duration-200 placeholder:text-muted-foreground/70 hover:border-white/[0.18] focus:border-primary/55 focus:bg-[#111827] focus:ring-4 focus:ring-primary/10"
               />
             )}
-            <OpenInAppButton className="absolute right-1 top-1/2 h-9 -translate-y-1/2 rounded-xl px-2.5 text-xs hover:-translate-y-1/2" />
           </div>
         </div>
 
