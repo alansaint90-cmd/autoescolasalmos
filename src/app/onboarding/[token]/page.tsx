@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, FileUp, Loader2, Save, Sparkles } from "lucide-react";
+import { useParams } from "next/navigation";
 import { onboardingSections } from "@/lib/onboarding-schema";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +15,9 @@ type OnboardingFile = {
   uploadedAt: string;
 };
 
-export default function PublicOnboardingPage({ params }: { params: { token: string } }) {
+export default function PublicOnboardingPage() {
+  const params = useParams<{ token?: string | string[] }>();
+  const token = Array.isArray(params.token) ? params.token[0] : params.token;
   const [clientName, setClientName] = useState("Autoescola");
   const [responses, setResponses] = useState<Record<string, Record<string, string>>>({});
   const [files, setFiles] = useState<OnboardingFile[]>([]);
@@ -28,12 +31,18 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
 
   useEffect(() => {
     void loadOnboarding();
-  }, []);
+  }, [token]);
 
   async function loadOnboarding() {
+    if (!token) {
+      setStatus("Link invalido ou expirado.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch(`/api/onboarding/${params.token}`, { cache: "no-store" });
+      const response = await fetch(`/api/onboarding/${token}`, { cache: "no-store" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Link invalido.");
       setClientName(data.client?.name ?? "Autoescola");
@@ -58,11 +67,16 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
   }
 
   async function save(complete = false) {
+    if (!token) {
+      setStatus("Link invalido ou expirado.");
+      return;
+    }
+
     setSaving(true);
     setStatus("");
 
     try {
-      const response = await fetch(`/api/onboarding/${params.token}`, {
+      const response = await fetch(`/api/onboarding/${token}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responses, files, complete })
