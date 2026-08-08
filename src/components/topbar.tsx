@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bot, LogOut, Search, UserRound } from "lucide-react";
+import { OpenInAppButton } from "@/components/open-in-app-button";
 
 const COMPANY_PROFILE_STORAGE_KEY = "auto-pro-ia:company-profile";
 
@@ -226,6 +227,7 @@ export function Topbar({ title, subtitle, searchValue, onSearchChange, onNewLead
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <OpenInAppButton className="hidden sm:inline-flex" />
           <div className="group/ai-status relative">
             <button
               type="button"
