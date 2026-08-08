@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, FileUp, Loader2, Save, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronLeft, FileUp, Loader2, Save, Sparkles } from "lucide-react";
 import { useParams } from "next/navigation";
 import { onboardingSections } from "@/lib/onboarding-schema";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ export default function PublicOnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState(false);
   const step = onboardingSections[activeStep];
+  const isLastStep = activeStep === onboardingSections.length - 1;
   const progress = useMemo(() => Math.round(((activeStep + 1) / onboardingSections.length) * 100), [activeStep]);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function PublicOnboardingPage() {
     }));
   }
 
-  async function save(complete = false) {
+  async function save(complete = false, advance = false) {
     if (!token) {
       setStatus("Link invalido ou expirado.");
       return;
@@ -84,6 +85,9 @@ export default function PublicOnboardingPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Nao foi possivel salvar.");
       setCompleted(Boolean(complete));
+      if (advance) {
+        setActiveStep((current) => Math.min(onboardingSections.length - 1, current + 1));
+      }
       setStatus(complete ? "Onboarding concluido. O PDF foi gerado para a equipe Auto Pro IA." : "Progresso salvo.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Nao foi possivel salvar.");
@@ -233,23 +237,15 @@ export default function PublicOnboardingPage() {
             </button>
 
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void save(false)}
-                disabled={saving}
-                className="inline-flex h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 text-sm font-black text-primary transition hover:bg-primary/15 disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                Salvar e continuar depois
-              </button>
-              {activeStep < onboardingSections.length - 1 ? (
+              {!isLastStep ? (
                 <button
                   type="button"
-                  onClick={() => setActiveStep((current) => Math.min(onboardingSections.length - 1, current + 1))}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground transition hover:brightness-105"
+                  onClick={() => void save(false, true)}
+                  disabled={saving}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 text-sm font-black text-primary transition hover:bg-primary/15 disabled:opacity-60"
                 >
-                  Proxima etapa
-                  <ChevronRight className="size-4" />
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  Salvar e continuar
                 </button>
               ) : (
                 <button
