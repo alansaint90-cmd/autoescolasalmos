@@ -4,6 +4,7 @@ import { SYSTEM_USER_ID } from "@/lib/constants";
 import { db } from "@/lib/db/client";
 import { clientOnboardings, clients } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import { onboardingSections } from "@/lib/onboarding-schema";
 
 export type OnboardingStatus = "not_sent" | "waiting" | "in_progress" | "completed";
 
@@ -73,6 +74,65 @@ export async function getClientWithOnboarding(clientId: string) {
   return row ? { ...row.client, onboarding: row.onboarding } : null;
 }
 
+export function buildOnboardingPdfLines(input: {
+  clientName: string;
+  responses: Record<string, unknown>;
+  files?: Array<Record<string, unknown>>;
+  completedAt?: Date | string | null;
+}) {
+  const lines = [
+    "AUTO PRO IA",
+    "Onboarding de Cliente - Base de Conhecimento",
+    `Autoescola: ${input.clientName}`,
+    `Gerado em: ${new Date().toLocaleString("pt-BR")}`,
+    input.completedAt ? `Formulario enviado em: ${new Date(input.completedAt).toLocaleString("pt-BR")}` : "",
+    "",
+    "Observacao: este documento preserva as respostas informadas pelo cliente, sem resumo, para uso futuro como base de conhecimento do agente de IA.",
+    ""
+  ].filter(Boolean);
+
+  for (const section of onboardingSections) {
+    const rawSectionResponses = input.responses[section.id];
+    const sectionResponses: Record<string, unknown> = isRecord(rawSectionResponses)
+      ? rawSectionResponses
+      : {};
+    const sectionLines: string[] = [];
+
+    for (const field of section.fields) {
+      const answer = normalizeAnswer(sectionResponses[field.key]);
+      if (!answer) continue;
+
+      sectionLines.push(...wrapLine(`Pergunta: ${field.label}`));
+      sectionLines.push(...wrapLine(`Resposta: ${answer}`));
+      sectionLines.push("");
+    }
+
+    if (sectionLines.length > 0) {
+      lines.push(section.title);
+      lines.push(...sectionLines);
+    }
+  }
+
+  const files = input.files ?? [];
+  if (files.length > 0) {
+    lines.push("Materiais anexados");
+    for (const file of files) {
+      const name = typeof file.name === "string" ? file.name : "Arquivo sem nome";
+      const type = typeof file.type === "string" && file.type ? file.type : "tipo nao informado";
+      const size = typeof file.size === "number" ? formatBytes(file.size) : "tamanho nao informado";
+      lines.push(...wrapLine(`Arquivo: ${name} (${type}, ${size})`));
+    }
+  }
+
+  return lines.length > 8 ? lines : [
+    "AUTO PRO IA",
+    "Onboarding de Cliente - Base de Conhecimento",
+    `Autoescola: ${input.clientName}`,
+    "",
+    "Nenhuma resposta preenchida no formulario."
+  ];
+}
+
 export async function createClient(input: {
   name: string;
   contactName?: string;
@@ -125,6 +185,7 @@ export async function updateClient(input: {
 export async function generateOnboardingLink(clientId: string, modifiedBy: string) {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashOnboardingToken(token);
+  const url = publicOnboardingUrl(token);
   const now = new Date();
 
   await db
@@ -142,6 +203,7 @@ export async function generateOnboardingLink(clientId: string, modifiedBy: strin
     .values({
       client_id: clientId,
       token_hash: tokenHash,
+      public_url: url,
       status: "waiting",
       modified_by: modifiedBy
     })
@@ -159,7 +221,7 @@ export async function generateOnboardingLink(clientId: string, modifiedBy: strin
   return {
     onboarding,
     token,
-    url: publicOnboardingUrl(token)
+    url
   };
 }
 
@@ -203,6 +265,7 @@ export async function savePublicOnboarding(input: {
       started_at: found.onboarding.started_at ?? now,
       last_saved_at: now,
       completed_at: input.complete ? now : found.onboarding.completed_at,
+      pdf_generated_at: input.complete ? now : found.onboarding.pdf_generated_at,
       updated_at: now,
       modified_by: SYSTEM_USER_ID
     })
@@ -228,4 +291,40 @@ export async function savePublicOnboarding(input: {
 function cleanOptional(value?: string) {
   const cleanValue = value?.trim();
   return cleanValue || null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeAnswer(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value) && value.length > 0) return value.map(normalizeAnswer).filter(Boolean).join("; ");
+  if (isRecord(value)) return JSON.stringify(value);
+  return "";
+}
+
+function wrapLine(value: string, maxLength = 92) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLength) return [clean];
+
+  const lines: string[] = [];
+  let current = "";
+  for (const word of clean.split(" ")) {
+    if (`${current} ${word}`.trim().length > maxLength) {
+      if (current) lines.push(current);
+      current = word;
+    } else {
+      current = `${current} ${word}`.trim();
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "tamanho nao informado";
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }

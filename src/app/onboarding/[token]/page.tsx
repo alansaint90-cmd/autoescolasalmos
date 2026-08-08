@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, FileUp, Loader2, Save, Sparkles } from "lucide-react";
+import { onboardingSections } from "@/lib/onboarding-schema";
 import { cn } from "@/lib/utils";
 
 type OnboardingFile = {
@@ -13,123 +14,6 @@ type OnboardingFile = {
   uploadedAt: string;
 };
 
-type StepField = {
-  key: string;
-  label: string;
-  type?: "text" | "textarea";
-  placeholder?: string;
-};
-
-type StepConfig = {
-  id: string;
-  title: string;
-  description: string;
-  fields: StepField[];
-};
-
-const steps: StepConfig[] = [
-  {
-    id: "school",
-    title: "Dados da autoescola",
-    description: "Identificação principal para personalizar o agente.",
-    fields: [
-      { key: "schoolName", label: "Nome da autoescola" },
-      { key: "legalName", label: "Razão social" },
-      { key: "cnpj", label: "CNPJ" },
-      { key: "responsibleName", label: "Responsável pelo projeto" },
-      { key: "responsibleRole", label: "Cargo do responsável" }
-    ]
-  },
-  {
-    id: "channels",
-    title: "Canais e presença digital",
-    description: "Links e contatos que a IA poderá consultar ou informar.",
-    fields: [
-      { key: "address", label: "Endereço completo", type: "textarea" },
-      { key: "whatsapp", label: "WhatsApp principal" },
-      { key: "instagram", label: "Instagram" },
-      { key: "googleProfile", label: "Google/Maps" },
-      { key: "site", label: "Site" }
-    ]
-  },
-  {
-    id: "hours",
-    title: "Horários de atendimento",
-    description: "Informe horários presenciais, WhatsApp e exceções.",
-    fields: [
-      { key: "businessHours", label: "Horário comercial", type: "textarea" },
-      { key: "whatsappHours", label: "Horário de atendimento pelo WhatsApp", type: "textarea" },
-      { key: "afterHoursRule", label: "Como responder fora do horário?", type: "textarea" }
-    ]
-  },
-  {
-    id: "services",
-    title: "Serviços, categorias e preços",
-    description: "Detalhe categorias A, B, AB, adição, mudança e planos.",
-    fields: [
-      { key: "servicesOffered", label: "Serviços oferecidos", type: "textarea" },
-      { key: "categories", label: "Categorias A, B, AB, adição e mudança", type: "textarea" },
-      { key: "prices", label: "Preços e pacotes", type: "textarea" },
-      { key: "includedItems", label: "O que está incluso nos pacotes?", type: "textarea" }
-    ]
-  },
-  {
-    id: "payments",
-    title: "Pagamentos e taxas",
-    description: "Formas de pagamento, parcelamento e custos externos.",
-    fields: [
-      { key: "paymentMethods", label: "Formas de pagamento", type: "textarea" },
-      { key: "installments", label: "Parcelamento e condições", type: "textarea" },
-      { key: "additionalFees", label: "Taxas adicionais", type: "textarea" },
-      { key: "promotions", label: "Promoções vigentes", type: "textarea" }
-    ]
-  },
-  {
-    id: "process",
-    title: "Processo da habilitação",
-    description: "Etapas, documentos, aulas, veículos e diferenciais.",
-    fields: [
-      { key: "requiredDocuments", label: "Documentos necessários", type: "textarea" },
-      { key: "licenseProcess", label: "Processo da habilitação", type: "textarea" },
-      { key: "theoryClasses", label: "Aulas teóricas", type: "textarea" },
-      { key: "practicalClasses", label: "Aulas práticas", type: "textarea" },
-      { key: "vehiclesAndDifferentials", label: "Veículos e diferenciais", type: "textarea" }
-    ]
-  },
-  {
-    id: "sales",
-    title: "Comercial e prova social",
-    description: "Diferenciais, objeções, avaliações e respostas estratégicas.",
-    fields: [
-      { key: "commercialDifferentials", label: "Diferenciais comerciais", type: "textarea" },
-      { key: "frequentQuestions", label: "Perguntas frequentes", type: "textarea" },
-      { key: "mainObjections", label: "Principais objeções", type: "textarea" },
-      { key: "socialProof", label: "Avaliações e provas sociais", type: "textarea" }
-    ]
-  },
-  {
-    id: "ai",
-    title: "Agente de IA",
-    description: "Como o agente deve falar, qualificar e conduzir o atendimento.",
-    fields: [
-      { key: "toneOfVoice", label: "Tom de voz desejado", type: "textarea" },
-      { key: "qualificationQuestions", label: "Perguntas para qualificar o lead", type: "textarea" },
-      { key: "finalGoal", label: "Objetivo final do atendimento", type: "textarea" },
-      { key: "humanTransferRules", label: "Quando transferir para humano?", type: "textarea" },
-      { key: "forbiddenInfo", label: "Informações que a IA não pode fornecer", type: "textarea" },
-      { key: "followUpRules", label: "Regras de follow-up", type: "textarea" }
-    ]
-  },
-  {
-    id: "materials",
-    title: "Materiais comerciais",
-    description: "Envie logo, tabela de preços, PDFs, fotos e materiais de apoio.",
-    fields: [
-      { key: "materialsNotes", label: "Observações sobre os materiais", type: "textarea" }
-    ]
-  }
-];
-
 export default function PublicOnboardingPage({ params }: { params: { token: string } }) {
   const [clientName, setClientName] = useState("Autoescola");
   const [responses, setResponses] = useState<Record<string, Record<string, string>>>({});
@@ -139,9 +23,8 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const step = steps[activeStep];
-
-  const progress = useMemo(() => Math.round(((activeStep + 1) / steps.length) * 100), [activeStep]);
+  const step = onboardingSections[activeStep];
+  const progress = useMemo(() => Math.round(((activeStep + 1) / onboardingSections.length) * 100), [activeStep]);
 
   useEffect(() => {
     void loadOnboarding();
@@ -152,23 +35,23 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
     try {
       const response = await fetch(`/api/onboarding/${params.token}`, { cache: "no-store" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Link inválido.");
+      if (!response.ok) throw new Error(data.error || "Link invalido.");
       setClientName(data.client?.name ?? "Autoescola");
       setResponses(data.onboarding?.responses ?? {});
       setFiles(data.onboarding?.files ?? []);
       setCompleted(data.onboarding?.status === "completed");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Não foi possível abrir o onboarding.");
+      setStatus(error instanceof Error ? error.message : "Nao foi possivel abrir o onboarding.");
     } finally {
       setLoading(false);
     }
   }
 
-  function updateField(stepId: string, key: string, value: string) {
+  function updateField(sectionId: string, key: string, value: string) {
     setResponses((current) => ({
       ...current,
-      [stepId]: {
-        ...(current[stepId] ?? {}),
+      [sectionId]: {
+        ...(current[sectionId] ?? {}),
         [key]: value
       }
     }));
@@ -185,11 +68,11 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
         body: JSON.stringify({ responses, files, complete })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Não foi possível salvar.");
+      if (!response.ok) throw new Error(data.error || "Nao foi possivel salvar.");
       setCompleted(Boolean(complete));
-      setStatus(complete ? "Onboarding concluído. Obrigado!" : "Progresso salvo.");
+      setStatus(complete ? "Onboarding concluido. O PDF foi gerado para a equipe Auto Pro IA." : "Progresso salvo.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Não foi possível salvar.");
+      setStatus(error instanceof Error ? error.message : "Nao foi possivel salvar.");
     } finally {
       setSaving(false);
     }
@@ -230,7 +113,7 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
           </div>
           <div className="hidden items-center gap-2 text-xs font-bold text-slate-400 sm:flex">
             <Sparkles className="size-4 text-primary" />
-            Onboarding do agente de IA
+            Onboarding por link
           </div>
         </div>
       </header>
@@ -246,7 +129,7 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
           </div>
 
           <div className="grid gap-1">
-            {steps.map((item, index) => (
+            {onboardingSections.map((item, index) => (
               <button
                 key={item.id}
                 type="button"
@@ -266,12 +149,12 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
         <section className="min-w-0 rounded-2xl border border-white/[0.08] bg-[#0B1120]/80 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.28)]">
           {completed ? (
             <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-bold text-emerald-100">
-              Onboarding concluído. Você ainda pode revisar e salvar ajustes se necessário.
+              Onboarding concluido. Voce ainda pode revisar e salvar ajustes se necessario.
             </div>
           ) : null}
 
           <div className="mt-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Etapa {activeStep + 1} de {steps.length}</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Etapa {activeStep + 1} de {onboardingSections.length}</p>
             <h1 className="mt-2 text-2xl font-black tracking-normal">{step.title}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">{step.description}</p>
           </div>
@@ -303,7 +186,7 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
                 <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl bg-white/[0.03] p-6 text-center transition hover:bg-white/[0.06]">
                   <FileUp className="size-8 text-primary" />
                   <span className="text-sm font-black">Enviar logo, tabela, PDFs, fotos e materiais</span>
-                  <span className="text-xs text-slate-400">Os arquivos ficam salvos junto às respostas do onboarding.</span>
+                  <span className="text-xs text-slate-400">Os arquivos ficam salvos junto as respostas do onboarding.</span>
                   <input type="file" multiple className="hidden" onChange={(event) => void onFilesSelected(event.target.files)} />
                 </label>
                 {files.length > 0 ? (
@@ -345,13 +228,13 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
                 {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Salvar e continuar depois
               </button>
-              {activeStep < steps.length - 1 ? (
+              {activeStep < onboardingSections.length - 1 ? (
                 <button
                   type="button"
-                  onClick={() => setActiveStep((current) => Math.min(steps.length - 1, current + 1))}
+                  onClick={() => setActiveStep((current) => Math.min(onboardingSections.length - 1, current + 1))}
                   className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground transition hover:brightness-105"
                 >
-                  Próxima etapa
+                  Proxima etapa
                   <ChevronRight className="size-4" />
                 </button>
               ) : (
@@ -362,7 +245,7 @@ export default function PublicOnboardingPage({ params }: { params: { token: stri
                   className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-black text-primary-foreground transition hover:brightness-105 disabled:opacity-60"
                 >
                   <CheckCircle2 className="size-4" />
-                  Concluir onboarding
+                  Enviar formulario
                 </button>
               )}
             </div>
@@ -377,7 +260,7 @@ function ErrorState({ message }: { message: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-[#070c14] p-5 text-white">
       <div className="max-w-md rounded-2xl border border-white/[0.08] bg-[#0B1120] p-6 text-center">
-        <h1 className="text-xl font-black">Não foi possível abrir o onboarding</h1>
+        <h1 className="text-xl font-black">Nao foi possivel abrir o onboarding</h1>
         <p className="mt-3 text-sm leading-6 text-slate-400">{message}</p>
       </div>
     </main>
@@ -402,7 +285,7 @@ function readFileAsDataUrl(file: File): Promise<OnboardingFile> {
 }
 
 function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "Tamanho não informado";
+  if (!Number.isFinite(value) || value <= 0) return "Tamanho nao informado";
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
