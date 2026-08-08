@@ -10,6 +10,12 @@ const optionalString = z.preprocess(
   z.string().optional()
 );
 
+const stringWithBlankDefault = (defaultValue: string) =>
+  z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().min(1).default(defaultValue)
+  );
+
 const integerFromEnv = (defaultValue: number, minimum: number, maximum: number) =>
   z.preprocess(
     (value) => {
@@ -33,10 +39,10 @@ const booleanFromEnv = (defaultValue: boolean) =>
 const envSchema = z.object({
   DATABASE_URL: z.string().url().default("postgres://auto_pro_ia:auto_pro_ia@localhost:5432/auto_pro_ia"),
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
-  OPENAI_API_KEY: z.string().min(1).default("missing-openai-key"),
+  OPENAI_API_KEY: stringWithBlankDefault("missing-openai-key"),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
   EVOLUTION_API_URL: z.string().url().default("http://localhost:8080"),
-  EVOLUTION_API_KEY: z.string().min(1).default("missing-evolution-key"),
+  EVOLUTION_API_KEY: stringWithBlankDefault("missing-evolution-key"),
   EVOLUTION_INSTANCE_NAME: z.string().min(1).default("auto-pro-ia"),
   EVOLUTION_WEBHOOK_SECRET: optionalString,
   FOLLOW_UP_JOB_SECRET: optionalString,
