@@ -109,8 +109,15 @@ export async function POST(request: NextRequest) {
     const result = await registerInboundMessage(inbound);
     triggerDueFollowUpsInBackground({ source: "evolution-webhook", limit: 10 });
 
-    if (!result.duplicated && !inbound.fromMe && result.conversation.status === "ai") {
+    const shouldScheduleAiReply = !result.duplicated && !inbound.fromMe && result.conversation.status === "ai";
+
+    if (shouldScheduleAiReply) {
       const bufferWindowMs = getMessageBufferWindowMs();
+      console.info("[evolution-webhook] ai buffer processing scheduled", {
+        conversationId: result.conversation.id,
+        leadId: result.lead.id,
+        bufferMs: bufferWindowMs
+      });
       setTimeout(() => {
         processBufferedConversation(result.conversation.id).catch((error) => {
           console.error("[evolution-webhook] buffer processing failed", error);
@@ -124,6 +131,12 @@ export async function POST(request: NextRequest) {
           });
         });
       }, bufferWindowMs);
+    } else if (!result.duplicated && !inbound.fromMe) {
+      console.info("[evolution-webhook] ai buffer processing not scheduled", {
+        conversationId: result.conversation.id,
+        leadId: result.lead.id,
+        conversationStatus: result.conversation.status
+      });
     }
 
     console.info("[evolution-webhook] message registered", {
@@ -147,7 +160,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ ok: true, conversationId: result.conversation.id });
+    return NextResponse.json({
+      ok: true,
+      conversationId: result.conversation.id,
+      conversationStatus: result.conversation.status,
+      aiReplyScheduled: shouldScheduleAiReply
+    });
   } catch (error) {
     console.error("[evolution-webhook] failed to register inbound message", error);
     void logSystemEvent({

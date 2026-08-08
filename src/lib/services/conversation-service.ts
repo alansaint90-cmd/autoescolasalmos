@@ -156,6 +156,16 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
       leadName: inbound.leadName,
       messages: [{ role: "lead", content: inbound.text }]
     });
+    if (isPaidTrafficEntryMessage(inbound.text) && triage.action === "pause_ai") {
+      triage = {
+        ...triage,
+        type: "lead_comercial_novo",
+        action: "activate_ai",
+        reason: "Gatilho de anuncio reconhecido; atendimento automatico mantido.",
+        temperature: triage.temperature === "frio" ? "quente" : triage.temperature,
+        pipelineStage: "ia"
+      };
+    }
     leadSignal = {
       ...leadSignal,
       temperature: triage.temperature,

@@ -41,6 +41,11 @@ export async function triageInitialConversation(input: GenerateAiReplyInput): Pr
     .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
     .join("\n");
 
+  if (!isOpenAiConfigured()) {
+    console.warn("[ai-agent] triage fallback used because OPENAI_API_KEY is not configured");
+    return fallbackTriage(conversationText);
+  }
+
   try {
     const { text } = await generateText({
       model: openai(env.OPENAI_MODEL),
@@ -77,6 +82,17 @@ export async function generateAiReply(input: GenerateAiReplyInput): Promise<AiRe
   const conversationText = input.messages
     .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
     .join("\n");
+
+  if (!isOpenAiConfigured()) {
+    console.warn("[ai-agent] reply fallback used because OPENAI_API_KEY is not configured");
+    return {
+      text: buildOpenAiMissingFallbackReply(input.leadName),
+      safety: {
+        status: "ok",
+        reason: "OPENAI_API_KEY nao configurada; resposta padrao enviada para nao deixar o lead sem retorno."
+      }
+    };
+  }
 
   const { text } = await generateText({
     model: openai(env.OPENAI_MODEL),
@@ -124,6 +140,16 @@ export async function generateAiManualSuggestion(input: GenerateAiReplyInput): P
   const conversationText = input.messages
     .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
     .join("\n");
+
+  if (!isOpenAiConfigured()) {
+    return {
+      text: buildOpenAiMissingFallbackReply(input.leadName),
+      safety: {
+        status: "ok",
+        reason: "OPENAI_API_KEY nao configurada; sugestao padrao gerada."
+      }
+    };
+  }
 
   const { text } = await generateText({
     model: openai(env.OPENAI_MODEL),
@@ -174,6 +200,10 @@ export async function generateAiFollowUp(input: GenerateFollowUpInput) {
   const conversationText = input.messages
     .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
     .join("\n");
+
+  if (!isOpenAiConfigured()) {
+    return buildOpenAiMissingFallbackReply(input.leadName);
+  }
 
   const followUpGuides: Record<number, string> = {
     1: [
@@ -310,6 +340,20 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Se estiver retomando um lead sem resposta, envie follow-up contextual curto, usando o assunto real da conversa e uma pergunta objetiva.",
     "- Ao receber qualquer nova resposta do cliente, considere o follow-up reiniciado e siga a conversa normalmente."
   ].join("\n");
+}
+
+function isOpenAiConfigured() {
+  const key = env.OPENAI_API_KEY?.trim();
+  return Boolean(key && key !== "missing-openai-key");
+}
+
+function buildOpenAiMissingFallbackReply(leadName?: string | null) {
+  const greeting = leadName?.trim() ? `Ola, ${leadName.trim()}!` : "Ola!";
+  return [
+    greeting,
+    "Recebi sua mensagem e vou te ajudar com as informacoes da habilitacao na Auto Escola Renacer.",
+    "Me diga qual categoria voce deseja: A, B ou AB?"
+  ].join(" ");
 }
 
 function validateCommercialFacts(text: string, settings: BusinessSettings): AiReplyResult["safety"] {
