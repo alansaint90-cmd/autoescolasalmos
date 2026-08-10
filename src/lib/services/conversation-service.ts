@@ -926,10 +926,7 @@ export async function processBufferedConversation(conversationId: string) {
   }
 
   if (hasLeadTag(lead.tags, AI_AD_FLOW_TAG) && !recentMessages.some((message) => message.role === "ai")) {
-    const firstName = getLeadFirstName(lead.name);
-    const greetingMessage = sanitizeWhatsAppText(firstName
-      ? `Oi, ${firstName}! Aqui e a Laura, da Auto Escola Expresso 21.`
-      : "Oi! Aqui e a Laura, da Auto Escola Expresso 21.");
+    const greetingMessage = sanitizeWhatsAppText("Oi! Aqui e a Laura, da Auto Escola Expresso 21.");
     const adFlowQuestion = sanitizeWhatsAppText(INITIAL_AD_FLOW_QUESTION);
 
     console.info("[conversation-service] sending paid ad flow intro messages", {
@@ -1598,16 +1595,6 @@ function isAiAllowedLead(origin?: string | null, tags?: unknown) {
 
 function hasLeadTag(tags: unknown, tag: string) {
   return Array.isArray(tags) && tags.includes(tag);
-}
-
-function getLeadFirstName(name?: string | null) {
-  const cleanName = (name ?? "")
-    .replace(/[^\p{L}\s'-]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleanName || cleanName.length < 2) return "";
-  return cleanName.split(" ")[0] ?? "";
 }
 
 function classifyStudentTypeAnswer(text: string): "first_time" | "existing_student" | "unclear" {

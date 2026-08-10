@@ -86,7 +86,7 @@ export async function generateAiReply(input: GenerateAiReplyInput): Promise<AiRe
   if (!isOpenAiConfigured()) {
     console.warn("[ai-agent] reply fallback used because OPENAI_API_KEY is not configured");
     return {
-      text: buildOpenAiMissingFallbackReply(input.leadName),
+      text: buildOpenAiMissingFallbackReply(),
       safety: {
         status: "ok",
         reason: "OPENAI_API_KEY nao configurada; resposta padrao enviada para nao deixar o lead sem retorno."
@@ -98,7 +98,6 @@ export async function generateAiReply(input: GenerateAiReplyInput): Promise<AiRe
     model: openai(env.OPENAI_MODEL),
     system: systemPrompt,
     prompt: [
-      input.leadName ? `Nome do lead: ${input.leadName}` : "",
       input.contextSummary ? `Resumo anterior: ${input.contextSummary}` : "",
       "Conversa recente:",
       conversationText,
@@ -143,7 +142,7 @@ export async function generateAiManualSuggestion(input: GenerateAiReplyInput): P
 
   if (!isOpenAiConfigured()) {
     return {
-      text: buildOpenAiMissingFallbackReply(input.leadName),
+      text: buildOpenAiMissingFallbackReply(),
       safety: {
         status: "ok",
         reason: "OPENAI_API_KEY nao configurada; sugestao padrao gerada."
@@ -155,7 +154,6 @@ export async function generateAiManualSuggestion(input: GenerateAiReplyInput): P
     model: openai(env.OPENAI_MODEL),
     system: systemPrompt,
     prompt: [
-      input.leadName ? `Nome do lead: ${input.leadName}` : "",
       input.contextSummary ? `Resumo anterior: ${input.contextSummary}` : "",
       "Conversa recente:",
       conversationText,
@@ -202,7 +200,7 @@ export async function generateAiFollowUp(input: GenerateFollowUpInput) {
     .join("\n");
 
   if (!isOpenAiConfigured()) {
-    return buildOpenAiMissingFallbackReply(input.leadName);
+    return buildOpenAiMissingFallbackReply();
   }
 
   const followUpGuides: Record<number, string> = {
@@ -246,7 +244,6 @@ export async function generateAiFollowUp(input: GenerateFollowUpInput) {
     model: openai(env.OPENAI_MODEL),
     system: systemPrompt,
     prompt: [
-      input.leadName ? `Nome do lead: ${input.leadName}` : "",
       input.contextSummary ? `Resumo anterior: ${input.contextSummary}` : "",
       `Follow-up automatico numero ${input.followUpNumber} de 5.`,
       `Tempo sem resposta: aproximadamente ${input.hoursWithoutResponse} horas.`,
@@ -306,6 +303,10 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Nunca invente preco, taxa, desconto, prazo, data, documento obrigatorio ou condicao de pagamento.",
     "- Se o preco, prazo ou regra nao estiver exatamente no contexto dinamico, diga que vai confirmar com um atendente humano.",
     "- Use somente valores em reais, parcelamentos, taxas, endereco, horarios e regras cadastrados no contexto dinamico.",
+    "- Nao use o nome do perfil do WhatsApp para chamar o cliente. Enquanto o cliente nao informar nome completo na conversa, use saudacoes neutras.",
+    "- Depois que o cliente informar o nome completo, pode chamar pelo primeiro nome extraido desse nome informado por ele.",
+    "- Nao pergunte nome antes da etapa de matricula.",
+    "- Quando chegar na etapa de matricula e precisar pedir nome completo e turno, envie em duas mensagens separadas usando |||SPLIT|||. Exemplo: 'Perfeito! Para registrar direitinho sua matricula, me informe seu nome completo.' |||SPLIT||| 'E qual turno voce prefere para as aulas praticas: manha, tarde ou noite?'",
     "- REGRA FIXA AUTO ESCOLA EXPRESSO 21 SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
     "- O fluxo correto e: o laudo e comprado na propria Auto Escola Expresso 21. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
     "- Exame medico e avaliacao psicologica sao feitos em clinicas credenciadas. Explique assim: 'Voce compra o laudo conosco e nele ja constam as clinicas credenciadas para realizar os exames.'",
@@ -349,8 +350,8 @@ function isOpenAiConfigured() {
   return Boolean(key && key !== "missing-openai-key");
 }
 
-function buildOpenAiMissingFallbackReply(leadName?: string | null) {
-  const greeting = leadName?.trim() ? `Ola, ${leadName.trim()}!` : "Ola!";
+function buildOpenAiMissingFallbackReply() {
+  const greeting = "Ola!";
   return [
     greeting,
     "Recebi sua mensagem e vou te ajudar com as informacoes da habilitacao na Auto Escola Expresso 21.",
