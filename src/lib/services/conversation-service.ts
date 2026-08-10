@@ -38,6 +38,7 @@ const MANUAL_CONTACT_TAG = "manual_contact";
 const AWAITING_STUDENT_TYPE_TAG = "aguardando_tipo_aluno";
 const AI_CURRENT_FLOW_TAG = "ia_fluxo_primeira_vez";
 const AI_PAUSED_STUDENT_TAG = "ia_pausada_aluno_existente";
+const INITIAL_STUDENT_TYPE_WELCOME = "Seja bem vindo ao atendimento da Auto Escola Expresso 21.";
 const INITIAL_STUDENT_TYPE_QUESTION = "Antes de continuar, me conta uma coisa: voce ja e aluno nosso ou e sua primeira vez por aqui?";
 
 export async function registerInboundMessage(input: NormalizedInboundMessage) {
@@ -146,6 +147,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
       metadata: {
         gate: "student_type",
         appliedTag: AWAITING_STUDENT_TYPE_TAG,
+        welcomeMessage: INITIAL_STUDENT_TYPE_WELCOME,
         nextQuestion: INITIAL_STUDENT_TYPE_QUESTION,
         conversationCreated: conversationState.created
       }
@@ -251,6 +253,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
       metadata: {
         gate: "student_type",
         appliedTag: AWAITING_STUDENT_TYPE_TAG,
+        welcomeMessage: INITIAL_STUDENT_TYPE_WELCOME,
         nextQuestion: INITIAL_STUDENT_TYPE_QUESTION
       }
     });
@@ -840,45 +843,70 @@ export async function processBufferedConversation(conversationId: string) {
   }
 
   if (hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)) {
+    const welcomeMessage = sanitizeWhatsAppText(INITIAL_STUDENT_TYPE_WELCOME);
     const qualificationQuestion = sanitizeWhatsAppText(INITIAL_STUDENT_TYPE_QUESTION);
-    console.info("[conversation-service] sending student type qualification question", {
+    console.info("[conversation-service] sending student type qualification messages", {
       conversationId,
       leadId: lead.id
     });
 
-    const evolutionResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+    const welcomeResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+      phone: lead.phone,
+      text: welcomeMessage
+    }));
+    const questionResults = normalizeEvolutionSendResults(await sendWhatsAppText({
       phone: lead.phone,
       text: qualificationQuestion
     }));
 
-    const [aiMessage] = await db
+    const insertedMessages = await db
       .insert(messages)
-      .values({
-        conversation_id: conversationId,
-        external_message_id: evolutionResults[0]?.messageId,
-        role: "ai",
-        content: qualificationQuestion,
-        metadata: {
-          source: "auto_pro_ia_gate",
-          gate: "student_type",
-          bufferedMessageIds: buffered.map((item) => item.messageId),
-          evolutionMessageKeys: evolutionResults.map((result) => result.key).filter(Boolean)
+      .values([
+        {
+          conversation_id: conversationId,
+          external_message_id: welcomeResults[0]?.messageId,
+          role: "ai",
+          content: welcomeMessage,
+          metadata: {
+            source: "auto_pro_ia_gate",
+            gate: "student_type",
+            gateMessage: "welcome",
+            bufferedMessageIds: buffered.map((item) => item.messageId),
+            evolutionMessageKeys: welcomeResults.map((result) => result.key).filter(Boolean)
+          },
+          modified_by: SYSTEM_USER_ID
         },
-        modified_by: SYSTEM_USER_ID
-      })
+        {
+          conversation_id: conversationId,
+          external_message_id: questionResults[0]?.messageId,
+          role: "ai",
+          content: qualificationQuestion,
+          metadata: {
+            source: "auto_pro_ia_gate",
+            gate: "student_type",
+            gateMessage: "question",
+            bufferedMessageIds: buffered.map((item) => item.messageId),
+            evolutionMessageKeys: questionResults.map((result) => result.key).filter(Boolean)
+          },
+          modified_by: SYSTEM_USER_ID
+        }
+      ])
       .returning();
+    const [welcomeAiMessage, questionAiMessage] = insertedMessages;
 
     await logAiDecision({
       conversationId,
       leadId: lead.id,
-      messageId: aiMessage.id,
+      messageId: questionAiMessage?.id ?? welcomeAiMessage?.id,
       action: "ai_triage_applied",
-      reason: "Lead esta com tag aguardando_tipo_aluno; enviada pergunta inicial antes de liberar ou pausar a IA.",
+      reason: "Lead esta com tag aguardando_tipo_aluno; enviadas saudacao e pergunta inicial antes de liberar ou pausar a IA.",
       mode: "ai",
       safetyStatus: "ok",
       metadata: {
         gate: "student_type",
         waitingTag: AWAITING_STUDENT_TYPE_TAG,
+        welcomeMessage,
+        question: qualificationQuestion,
         bufferedMessageIds: buffered.map((item) => item.messageId)
       }
     });
@@ -896,18 +924,28 @@ export async function processBufferedConversation(conversationId: string) {
     await publishRealtimeEvent({
       type: "message.created",
       conversationId,
-      payload: { message: aiMessage }
+      payload: { message: welcomeAiMessage }
     });
 
-    await appendRecentConversationContext({
-      conversationId,
-      messageId: aiMessage.id,
-      role: aiMessage.role,
-      content: qualificationQuestion,
-      createdAt: new Date().toISOString()
-    });
+    if (questionAiMessage) {
+      await publishRealtimeEvent({
+        type: "message.created",
+        conversationId,
+        payload: { message: questionAiMessage }
+      });
+    }
 
-    return { skipped: false, message: aiMessage };
+    for (const message of insertedMessages) {
+      await appendRecentConversationContext({
+        conversationId,
+        messageId: message.id,
+        role: message.role,
+        content: message.content,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    return { skipped: false, message: questionAiMessage ?? welcomeAiMessage };
   }
 
   if (!isAiAllowedLead(lead.origin, lead.tags)) {
