@@ -927,51 +927,75 @@ export async function processBufferedConversation(conversationId: string) {
 
   if (hasLeadTag(lead.tags, AI_AD_FLOW_TAG) && !recentMessages.some((message) => message.role === "ai")) {
     const firstName = getLeadFirstName(lead.name);
-    const greeting = firstName
+    const greetingMessage = sanitizeWhatsAppText(firstName
       ? `Oi, ${firstName}! Aqui e a Laura, da Auto Escola Expresso 21.`
-      : "Oi! Aqui e a Laura, da Auto Escola Expresso 21.";
-    const adFlowMessage = sanitizeWhatsAppText(`${greeting}\n\n${INITIAL_AD_FLOW_QUESTION}`);
+      : "Oi! Aqui e a Laura, da Auto Escola Expresso 21.");
+    const adFlowQuestion = sanitizeWhatsAppText(INITIAL_AD_FLOW_QUESTION);
 
-    console.info("[conversation-service] sending paid ad flow intro message", {
+    console.info("[conversation-service] sending paid ad flow intro messages", {
       conversationId,
       leadId: lead.id
     });
 
-    const sendResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+    const greetingResults = normalizeEvolutionSendResults(await sendWhatsAppText({
       phone: lead.phone,
-      text: adFlowMessage
+      text: greetingMessage
+    }));
+    const questionResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+      phone: lead.phone,
+      text: adFlowQuestion
     }));
 
-    const [aiMessage] = await db
+    const insertedMessages = await db
       .insert(messages)
-      .values({
-        conversation_id: conversationId,
-        external_message_id: sendResults[0]?.messageId,
-        role: "ai",
-        content: adFlowMessage,
-        metadata: {
-          source: "auto_pro_ia_ad_flow",
-          flow: "paid_entry_message",
-          triggerTag: AI_AD_FLOW_TAG,
-          bufferedMessageIds: buffered.map((item) => item.messageId),
-          evolutionMessageKeys: sendResults.map((result) => result.key).filter(Boolean)
+      .values([
+        {
+          conversation_id: conversationId,
+          external_message_id: greetingResults[0]?.messageId,
+          role: "ai",
+          content: greetingMessage,
+          metadata: {
+            source: "auto_pro_ia_ad_flow",
+            flow: "paid_entry_message",
+            adFlowMessage: "greeting",
+            triggerTag: AI_AD_FLOW_TAG,
+            bufferedMessageIds: buffered.map((item) => item.messageId),
+            evolutionMessageKeys: greetingResults.map((result) => result.key).filter(Boolean)
+          },
+          modified_by: SYSTEM_USER_ID
         },
-        modified_by: SYSTEM_USER_ID
-      })
+        {
+          conversation_id: conversationId,
+          external_message_id: questionResults[0]?.messageId,
+          role: "ai",
+          content: adFlowQuestion,
+          metadata: {
+            source: "auto_pro_ia_ad_flow",
+            flow: "paid_entry_message",
+            adFlowMessage: "question",
+            triggerTag: AI_AD_FLOW_TAG,
+            bufferedMessageIds: buffered.map((item) => item.messageId),
+            evolutionMessageKeys: questionResults.map((result) => result.key).filter(Boolean)
+          },
+          modified_by: SYSTEM_USER_ID
+        }
+      ])
       .returning();
+    const [greetingAiMessage, questionAiMessage] = insertedMessages;
 
     await logAiDecision({
       conversationId,
       leadId: lead.id,
-      messageId: aiMessage?.id,
+      messageId: questionAiMessage?.id ?? greetingAiMessage?.id,
       action: "ai_reply_generated",
-      reason: "Lead entrou pelo gatilho de anuncio; enviada primeira pergunta fixa do fluxo comercial.",
+      reason: "Lead entrou pelo gatilho de anuncio; enviadas saudacao e primeira pergunta fixa do fluxo comercial.",
       mode: "ai",
       safetyStatus: "ok",
       metadata: {
         flow: "paid_entry_message",
         triggerTag: AI_AD_FLOW_TAG,
-        question: INITIAL_AD_FLOW_QUESTION,
+        greeting: greetingMessage,
+        question: adFlowQuestion,
         bufferedMessageIds: buffered.map((item) => item.messageId)
       }
     });
@@ -989,21 +1013,29 @@ export async function processBufferedConversation(conversationId: string) {
     await publishRealtimeEvent({
       type: "message.created",
       conversationId,
-      payload: { message: aiMessage }
+      payload: { message: greetingAiMessage }
     });
 
-    if (aiMessage) {
+    if (questionAiMessage) {
+      await publishRealtimeEvent({
+        type: "message.created",
+        conversationId,
+        payload: { message: questionAiMessage }
+      });
+    }
+
+    for (const message of insertedMessages) {
       await appendRecentConversationContext({
         conversationId,
-        messageId: aiMessage.id,
-        role: aiMessage.role,
-        content: aiMessage.content,
+        messageId: message.id,
+        role: message.role,
+        content: message.content,
         createdAt: new Date().toISOString()
       });
     }
 
     await scheduleLeadFollowUp(lead.id);
-    return { skipped: false, message: aiMessage };
+    return { skipped: false, message: questionAiMessage ?? greetingAiMessage };
   }
 
   if (!isAiAllowedLead(lead.origin, lead.tags)) {
