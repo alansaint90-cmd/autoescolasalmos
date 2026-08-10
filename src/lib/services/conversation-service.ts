@@ -3,7 +3,7 @@ import { db } from "@/lib/db/client";
 import { conversations, handoffEvents, leads, messages, users } from "@/lib/db/schema";
 import { SYSTEM_USER_ID } from "@/lib/constants";
 import { env } from "@/lib/env";
-import { generateAiReply, triageInitialConversation, type AiTriageResult } from "@/lib/services/ai-agent";
+import { generateAiReply, type AiTriageResult } from "@/lib/services/ai-agent";
 import { isWhatsAppAiPaused } from "@/lib/services/ai-control-service";
 import { logAiDecision } from "@/lib/services/ai-decision-log-service";
 import { transcribeInboundAudio, type AudioTranscriptionResult } from "@/lib/services/audio-transcription-service";
@@ -35,6 +35,10 @@ import { logSystemEvent } from "@/lib/services/system-event-log-service";
 import type { NormalizedInboundMessage } from "@/lib/whatsapp/normalizer";
 
 const MANUAL_CONTACT_TAG = "manual_contact";
+const AWAITING_STUDENT_TYPE_TAG = "aguardando_tipo_aluno";
+const AI_CURRENT_FLOW_TAG = "ia_fluxo_primeira_vez";
+const AI_PAUSED_STUDENT_TAG = "ia_pausada_aluno_existente";
+const INITIAL_STUDENT_TYPE_QUESTION = "Antes de continuar, me conta uma coisa: voce ja e aluno nosso ou e sua primeira vez por aqui?";
 
 export async function registerInboundMessage(input: NormalizedInboundMessage) {
   await ensureSystemUser();
@@ -58,10 +62,72 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
   const lead = await upsertLead(inbound, leadSignal);
   const conversationState = await upsertConversation(lead.id, inbound.externalChatId);
   let conversation = conversationState.conversation;
-  let triage: AiTriageResult | null = null;
+  let qualificationGateHandled = false;
+
+  if (!inbound.fromMe && hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)) {
+    qualificationGateHandled = true;
+    const qualification = classifyStudentTypeAnswer(inbound.text);
+    if (qualification === "first_time") {
+      await updateLeadTags(lead.id, lead.tags, [AI_CURRENT_FLOW_TAG, "intencao_matricula"], [AWAITING_STUDENT_TYPE_TAG, AI_PAUSED_STUDENT_TAG]);
+      conversation = await updateConversationForQualificationGate({
+        conversationId: conversation.id,
+        status: "ai",
+        reason: "Lead informou que e sua primeira vez. IA comercial liberada para seguir o fluxo atual.",
+        context: "Qualificacao inicial: primeira vez. Fluxo comercial automatico liberado."
+      });
+      leadSignal = { ...leadSignal, pipelineStage: "ia" };
+      await logAiDecision({
+        conversationId: conversation.id,
+        leadId: lead.id,
+        action: "ai_mode_restored",
+        reason: "Lead respondeu que e sua primeira vez; tag de fluxo comercial aplicada e IA liberada.",
+        mode: "ai",
+        safetyStatus: "ok",
+        metadata: {
+          qualification,
+          appliedTag: AI_CURRENT_FLOW_TAG,
+          removedTag: AWAITING_STUDENT_TYPE_TAG
+        }
+      });
+    } else if (qualification === "existing_student") {
+      await updateLeadTags(lead.id, lead.tags, [AI_PAUSED_STUDENT_TAG], [AWAITING_STUDENT_TYPE_TAG, AI_CURRENT_FLOW_TAG, "intencao_matricula"]);
+      conversation = await updateConversationForQualificationGate({
+        conversationId: conversation.id,
+        status: "human",
+        reason: "Lead informou que ja e aluno. IA pausada no WhatsApp para atendimento humano.",
+        context: "Qualificacao inicial: aluno existente. IA pausada para atendimento humano."
+      });
+      leadSignal = { ...leadSignal, pipelineStage: "atendimento" };
+      await pauseLeadFollowUp(lead.id);
+      await clearConversationBuffer(conversation.id);
+      await logAiDecision({
+        conversationId: conversation.id,
+        leadId: lead.id,
+        action: "human_handoff_triggered",
+        reason: "Lead respondeu que ja e aluno; tag de pausa aplicada e IA pausada no WhatsApp.",
+        mode: "human",
+        safetyStatus: "ok",
+        metadata: {
+          qualification,
+          appliedTag: AI_PAUSED_STUDENT_TAG,
+          removedTag: AWAITING_STUDENT_TYPE_TAG
+        }
+      });
+    } else {
+      conversation = await updateConversationForQualificationGate({
+        conversationId: conversation.id,
+        status: "ai",
+        reason: "Aguardando o lead responder se ja e aluno ou se e sua primeira vez.",
+        context: "Qualificacao inicial pendente: aguardando resposta entre aluno existente e primeira vez."
+      });
+      leadSignal = { ...leadSignal, pipelineStage: "ia" };
+    }
+  }
+
   const shouldStartAiFlow = isAiEligibleInbound(inbound, lead.origin, conversationState.created);
   const whatsappAiPaused = !inbound.fromMe ? await isWhatsAppAiPaused() : false;
-  const shouldReactivateAiFlow = !inbound.fromMe
+  const shouldReactivateAiFlow = !qualificationGateHandled
+    && !inbound.fromMe
     && !conversationState.created
     && conversation.status !== "ai"
     && isPaidTrafficEntryMessage(inbound.text)
@@ -104,7 +170,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
     }
   }
 
-  if (!inbound.fromMe && conversationState.created && !shouldStartAiFlow && conversation.status === "ai") {
+  if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && !shouldStartAiFlow && conversation.status === "ai") {
     const manualQueue = await applyInitialManualQueue(
       conversation.id,
       lead.id,
@@ -147,49 +213,23 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
     });
   }
 
-  if (!inbound.fromMe && conversationState.created && shouldStartAiFlow && !whatsappAiPaused) {
-    if (!inbound.marketing?.isAdLead && !isAdsOrigin(lead.origin)) {
-      await markLeadAsIntentQualified(lead.id, lead.tags);
-    }
-
-    triage = await triageInitialConversation({
-      leadName: inbound.leadName,
-      messages: [{ role: "lead", content: inbound.text }]
-    });
-    if (isPaidTrafficEntryMessage(inbound.text) && triage.action === "pause_ai") {
-      triage = {
-        ...triage,
-        type: "lead_comercial_novo",
-        action: "activate_ai",
-        reason: "Gatilho de anuncio reconhecido; atendimento automatico mantido.",
-        temperature: triage.temperature === "frio" ? "quente" : triage.temperature,
-        pipelineStage: "ia"
-      };
-    }
-    leadSignal = {
-      ...leadSignal,
-      temperature: triage.temperature,
-      sentiment: triage.sentiment,
-      pipelineStage: triage.pipelineStage
-    };
-    const triageResult = await applyInitialTriage(conversation.id, lead.id, triage);
-    conversation = triageResult.conversation;
+  if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && shouldStartAiFlow && !whatsappAiPaused) {
+    const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
+    conversation = gateResult.conversation;
+    leadSignal = { ...leadSignal, pipelineStage: "ia" };
     await logAiDecision({
       conversationId: conversation.id,
       leadId: lead.id,
       action: "ai_triage_applied",
-      reason: triage.reason,
-      model: env.OPENAI_MODEL,
-      mode: "triage",
+      reason: "Gatilho inicial reconhecido. Antes do fluxo comercial, a IA perguntou se o contato ja e aluno ou se e a primeira vez.",
+      mode: "ai",
       metadata: {
-        type: triage.type,
-        action: triage.action,
-        temperature: triage.temperature,
-        sentiment: triage.sentiment,
-        pipelineStage: triage.pipelineStage
+        gate: "student_type",
+        appliedTag: AWAITING_STUDENT_TYPE_TAG,
+        nextQuestion: INITIAL_STUDENT_TYPE_QUESTION
       }
     });
-  } else if (!inbound.fromMe && conversationState.created && (!shouldStartAiFlow || whatsappAiPaused)) {
+  } else if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && (!shouldStartAiFlow || whatsappAiPaused)) {
     const manualQueue = await applyInitialManualQueue(
       conversation.id,
       lead.id,
@@ -258,7 +298,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
           eligibleForAi: shouldStartAiFlow
         },
         leadSignal: serializeLeadSignalForMetadata(leadSignal),
-        triage,
+        qualificationGate: qualificationGateHandled ? "student_type" : null,
         messageType: inbound.messageType,
         media: inboundMedia
           ? {
@@ -306,7 +346,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
     .update(conversations)
     .set({
       last_message_at: new Date(),
-      context_summary: buildContextSummary(inbound.text, leadSignal, triage),
+      context_summary: buildContextSummary(inbound.text, leadSignal),
       updated_at: new Date(),
       modified_by: SYSTEM_USER_ID
     })
@@ -333,7 +373,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
         sentiment: leadSignal.sentiment,
         pipelineStage: leadSignal.pipelineStage,
         interest: leadSignal.interest,
-        triageType: triage?.type
+        qualificationGate: qualificationGateHandled ? "student_type" : undefined
       }
     });
   }
@@ -772,6 +812,77 @@ export async function processBufferedConversation(conversationId: string) {
 
   if (!lead) {
     throw new Error("Lead da conversa nao encontrado.");
+  }
+
+  if (hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)) {
+    const qualificationQuestion = sanitizeWhatsAppText(INITIAL_STUDENT_TYPE_QUESTION);
+    console.info("[conversation-service] sending student type qualification question", {
+      conversationId,
+      leadId: lead.id
+    });
+
+    const evolutionResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+      phone: lead.phone,
+      text: qualificationQuestion
+    }));
+
+    const [aiMessage] = await db
+      .insert(messages)
+      .values({
+        conversation_id: conversationId,
+        external_message_id: evolutionResults[0]?.messageId,
+        role: "ai",
+        content: qualificationQuestion,
+        metadata: {
+          source: "auto_pro_ia_gate",
+          gate: "student_type",
+          bufferedMessageIds: buffered.map((item) => item.messageId),
+          evolutionMessageKeys: evolutionResults.map((result) => result.key).filter(Boolean)
+        },
+        modified_by: SYSTEM_USER_ID
+      })
+      .returning();
+
+    await logAiDecision({
+      conversationId,
+      leadId: lead.id,
+      messageId: aiMessage.id,
+      action: "ai_triage_applied",
+      reason: "Lead esta com tag aguardando_tipo_aluno; enviada pergunta inicial antes de liberar ou pausar a IA.",
+      mode: "ai",
+      safetyStatus: "ok",
+      metadata: {
+        gate: "student_type",
+        waitingTag: AWAITING_STUDENT_TYPE_TAG,
+        bufferedMessageIds: buffered.map((item) => item.messageId)
+      }
+    });
+
+    await db
+      .update(conversations)
+      .set({
+        last_message_at: new Date(),
+        context_summary: "Qualificacao inicial: aguardando resposta se o contato ja e aluno ou se e primeira vez.",
+        updated_at: new Date(),
+        modified_by: SYSTEM_USER_ID
+      })
+      .where(and(eq(conversations.id, conversationId), eq(conversations.is_deleted, false)));
+
+    await publishRealtimeEvent({
+      type: "message.created",
+      conversationId,
+      payload: { message: aiMessage }
+    });
+
+    await appendRecentConversationContext({
+      conversationId,
+      messageId: aiMessage.id,
+      role: aiMessage.role,
+      content: qualificationQuestion,
+      createdAt: new Date().toISOString()
+    });
+
+    return { skipped: false, message: aiMessage };
   }
 
   if (!isAiAllowedLead(lead.origin, lead.tags)) {
@@ -1330,6 +1441,140 @@ function isAdsOrigin(origin?: string | null) {
 function isAiAllowedLead(origin?: string | null, tags?: unknown) {
   if (isAdsOrigin(origin)) return true;
   return Array.isArray(tags) && tags.includes("intencao_matricula");
+}
+
+function hasLeadTag(tags: unknown, tag: string) {
+  return Array.isArray(tags) && tags.includes(tag);
+}
+
+function classifyStudentTypeAnswer(text: string): "first_time" | "existing_student" | "unclear" {
+  const normalized = text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const includesAny = (patterns: string[]) => patterns.some((pattern) => normalized.includes(pattern));
+
+  if (includesAny([
+    "primeira vez",
+    "primeira habilitacao",
+    "primeira cnh",
+    "nunca fui aluno",
+    "nao sou aluno",
+    "nao sou aluna",
+    "novo aluno",
+    "nova aluna",
+    "quero ser aluno",
+    "quero me matricular",
+    "quero fazer matricula"
+  ])) {
+    return "first_time";
+  }
+
+  if (includesAny([
+    "ja sou aluno",
+    "ja sou aluna",
+    "sou aluno",
+    "sou aluna",
+    "ja estudo",
+    "estou matriculado",
+    "estou matriculada",
+    "sou matriculado",
+    "sou matriculada",
+    "ja tenho cadastro",
+    "ja fiz matricula",
+    "ja estou fazendo",
+    "ja comecei",
+    "segunda via",
+    "remarcar aula",
+    "marcar aula",
+    "prova marcada",
+    "minha aula",
+    "minhas aulas"
+  ])) {
+    return "existing_student";
+  }
+
+  if (normalized === "nao" || normalized === "n") return "first_time";
+  if (normalized === "sim" || normalized === "s") return "existing_student";
+
+  return "unclear";
+}
+
+async function updateLeadTags(leadId: string, currentTags: unknown, addTags: string[], removeTags: string[] = []) {
+  const removeSet = new Set(removeTags);
+  const tags = mergeLeadTags(currentTags, addTags).filter((tag) => !removeSet.has(tag));
+
+  await db
+    .update(leads)
+    .set({
+      tags,
+      updated_at: new Date(),
+      modified_by: SYSTEM_USER_ID
+    })
+    .where(and(eq(leads.id, leadId), eq(leads.is_deleted, false)));
+
+  return tags;
+}
+
+async function updateConversationForQualificationGate(input: {
+  conversationId: string;
+  status: "ai" | "human";
+  reason: string;
+  context: string;
+}) {
+  const [conversation] = await db
+    .update(conversations)
+    .set({
+      status: input.status,
+      assigned_to: null,
+      ai_paused_reason: input.status === "human" ? input.reason : null,
+      context_summary: input.context,
+      updated_at: new Date(),
+      modified_by: SYSTEM_USER_ID
+    })
+    .where(and(eq(conversations.id, input.conversationId), eq(conversations.is_deleted, false)))
+    .returning();
+
+  if (conversation) return conversation;
+
+  const [current] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.id, input.conversationId), eq(conversations.is_deleted, false)))
+    .limit(1);
+
+  if (!current) {
+    throw new Error("Conversa nao encontrada ao atualizar qualificacao inicial.");
+  }
+
+  return current;
+}
+
+async function startStudentTypeGate(conversationId: string, leadId: string, currentTags: unknown) {
+  await updateLeadTags(leadId, currentTags, [AWAITING_STUDENT_TYPE_TAG], [AI_CURRENT_FLOW_TAG, AI_PAUSED_STUDENT_TAG]);
+  const conversation = await updateConversationForQualificationGate({
+    conversationId,
+    status: "ai",
+    reason: "Aguardando resposta se o contato ja e aluno ou se e primeira vez.",
+    context: "Qualificacao inicial: antes do fluxo comercial, perguntar se ja e aluno ou se e primeira vez."
+  });
+
+  await moveLeadStage({
+    leadId,
+    toStage: "ia",
+    conversationId,
+    reason: "Gatilho inicial reconhecido; aguardando qualificacao aluno existente x primeira vez.",
+    actor: "IA",
+    updates: {
+      last_interaction_at: new Date()
+    }
+  });
+
+  return { conversation };
 }
 
 function hasClearEnrollmentIntent(text: string) {
