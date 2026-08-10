@@ -4,8 +4,8 @@ import { env } from "@/lib/env";
 import { sendWhatsAppText } from "@/lib/services/evolution-api";
 import { assertPermission } from "@/lib/services/permission-service";
 
-const fallbackRecipients = ["5571988480222", "5571996729683"];
-const fallbackSupportRecipient = "5571988345088";
+const fallbackRecipients: string[] = [];
+const fallbackSupportRecipient = "";
 
 type NotificationRecipient = {
   label: string;

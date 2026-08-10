@@ -53,7 +53,7 @@ export async function triageInitialConversation(input: GenerateAiReplyInput): Pr
         businessSettings.triagePrompt,
         "",
         "CONTEXTO DINAMICO:",
-        `Empresa: Auto Escola Renacer`,
+        `Empresa: Auto Escola Expresso 21`,
         `Agente IA: ${businessSettings.agentName}`,
         `Endereco: ${businessSettings.address}`,
         `Horario: ${businessSettings.hours}`,
@@ -112,7 +112,7 @@ export async function generateAiReply(input: GenerateAiReplyInput): Promise<AiRe
   if (safety.status === "blocked") {
     const safeText = [
       "Para nao te passar uma informacao comercial incorreta, vou confirmar esse detalhe com um atendente.",
-      "Um especialista do Auto Escola Renacer vai assumir para seguir com seguranca."
+      "Um especialista do Auto Escola Expresso 21 vai assumir para seguir com seguranca."
     ].join(" ");
 
     console.warn("[ai-agent] response blocked by safety guard", {
@@ -276,7 +276,7 @@ type BusinessSettings = Awaited<ReturnType<typeof getAiBusinessSettings>>;
 function buildSystemPrompt(settings: BusinessSettings) {
   const dynamicContext = [
     `Agente IA configurado: ${settings.agentName}`,
-    "Empresa: Auto Escola Renacer",
+    "Empresa: Auto Escola Expresso 21",
     `Endereco: ${settings.address}`,
     `Horario de atendimento: ${settings.hours}`,
     "Precos, planos e regras comerciais:",
@@ -293,7 +293,7 @@ function buildSystemPrompt(settings: BusinessSettings) {
 
   const basePrompt = settings.sdrPrompt
     .replaceAll("{{agentName}}", settings.agentName)
-    .replaceAll("{{companyName}}", "Auto Escola Renacer")
+    .replaceAll("{{companyName}}", "Auto Escola Expresso 21")
     .replaceAll("{{dynamicContext}}", dynamicContext);
 
   return [
@@ -306,17 +306,17 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Nunca invente preco, taxa, desconto, prazo, data, documento obrigatorio ou condicao de pagamento.",
     "- Se o preco, prazo ou regra nao estiver exatamente no contexto dinamico, diga que vai confirmar com um atendente humano.",
     "- Use somente valores em reais, parcelamentos, taxas, endereco, horarios e regras cadastrados no contexto dinamico.",
-    "- REGRA FIXA AUTO ESCOLA RENACER SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
-    "- O fluxo correto e: o laudo e comprado na propria Auto Escola Renacer. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
+    "- REGRA FIXA AUTO ESCOLA EXPRESSO 21 SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
+    "- O fluxo correto e: o laudo e comprado na propria Auto Escola Expresso 21. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
     "- Exame medico e avaliacao psicologica sao feitos em clinicas credenciadas. Explique assim: 'Voce compra o laudo conosco e nele ja constam as clinicas credenciadas para realizar os exames.'",
-    "- Atendimento PCD: a Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados. Nunca informe que atende PCD, aula adaptada ou veiculo adaptado.",
+    "- Atendimento PCD: a Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados. Nunca informe que atende PCD, aula adaptada ou veiculo adaptado.",
     "- Primeira CNH A, B ou AB: requisitos basicos sao ter 18 anos ou mais, saber ler e escrever, RG e CPF validos e comprovante de residencia atualizado dos ultimos 3 meses.",
     "- Documentos basicos: RG original e recente, CPF e comprovante de residencia atualizado, como conta de agua, luz ou telefone, dos ultimos 3 meses.",
-    "- Primeira habilitacao A/B/AB segue: comprar laudo na Auto Escola Renacer, fazer exames indicados no laudo, curso teorico online e gratuito pela plataforma CNH do Brasil, prova teorica do Detran, aulas praticas, prova pratica e emissao da CNH.",
-    "- Curso teorico: nunca diga que ha turma, horario fixo, duracao por aula ou limite de tempo. O correto e: plataforma CNH do Brasil, 100% online e gratuita; o aluno faz conforme sua disponibilidade, basta baixar o aplicativo. A Auto Escola Renacer da suporte no acesso e envia material complementar de estudo.",
-    "- Atendimento regional: a Auto Escola Renacer fica em Catu - Bahia. Todas as aulas, etapas presenciais e atendimento da autoescola acontecem em Catu, na Auto Escola Renacer.",
-    "- Alagoinhas, Pojuca e Sao Sebastiao sao cidades proximas atendidas comercialmente; alunos dessas cidades podem se deslocar ate Catu para tirar a habilitacao. Nunca diga que ha aulas, curso presencial, prova ou atendimento da CFC em Alagoinhas, Pojuca ou Sao Sebastiao.",
-    "- Bairro nao e informacao relevante para o atendimento. Nunca pergunte em qual bairro o cliente mora, nunca pergunte em qual bairro ele prefere fazer aulas e nunca sugira escolha de bairro para aula. O aluno nao escolhe bairro: todas as aulas iniciam na autoescola em Catu.",
+    "- Primeira habilitacao A/B/AB segue: comprar laudo na Auto Escola Expresso 21, fazer exames indicados no laudo, curso teorico online e gratuito pela plataforma CNH do Brasil, prova teorica do Detran, aulas praticas, prova pratica e emissao da CNH.",
+    "- Curso teorico: nunca diga que ha turma, horario fixo, duracao por aula ou limite de tempo. O correto e: plataforma CNH do Brasil, 100% online e gratuita; o aluno faz conforme sua disponibilidade, basta baixar o aplicativo. A Auto Escola Expresso 21 da suporte no acesso e envia material complementar de estudo.",
+    "- Atendimento regional: use somente o endereco e cidades cadastrados no contexto dinamico. Todas as aulas, etapas presenciais e atendimento devem acontecer na unidade cadastrada da Auto Escola Expresso 21.",
+    "- Cidades atendidas comercialmente devem ser confirmadas no cadastro da Auto Escola Expresso 21. Nunca diga que ha aulas, curso presencial, prova ou atendimento da CFC em cidade nao cadastrada.",
+    "- Bairro nao e informacao relevante para o atendimento. Nunca pergunte em qual bairro o cliente mora, nunca pergunte em qual bairro ele prefere fazer aulas e nunca sugira escolha de bairro para aula. O aluno nao escolhe bairro: todas as aulas iniciam na unidade cadastrada da autoescola.",
     "- Nao informe toxicologico para primeira habilitacao A ou B.",
     "- Adicao A/B exige CNH regular, nao suspensa nem cassada; se exames ainda estiverem validos e sem restricao, diga que pode nao precisar refazer, mas precisa confirmar no atendimento da CFC/Detran.",
     "- Mudanca D/E exige pelo menos 21 anos, requisitos de tempo de categoria, exame toxicologico em laboratorio credenciado pela Senatran, exames medicos, aulas praticas e prova pratica.",
@@ -351,7 +351,7 @@ function buildOpenAiMissingFallbackReply(leadName?: string | null) {
   const greeting = leadName?.trim() ? `Ola, ${leadName.trim()}!` : "Ola!";
   return [
     greeting,
-    "Recebi sua mensagem e vou te ajudar com as informacoes da habilitacao na Auto Escola Renacer.",
+    "Recebi sua mensagem e vou te ajudar com as informacoes da habilitacao na Auto Escola Expresso 21.",
     "Me diga qual categoria voce deseja: A, B ou AB?"
   ].join(" ");
 }
@@ -412,14 +412,22 @@ function normalizeMatches(values: string[] | null) {
 
 function sanitizeAiOutput(text: string) {
   const sanitized = text
+    .replace(/Auto Escola Renacer/g, "Auto Escola Expresso 21")
+    .replace(/AUTO ESCOLA RENACER/g, "AUTO ESCOLA EXPRESSO 21")
+    .replace(/auto escola renacer/g, "auto escola expresso 21")
+    .replace(/Autoescola Renacer/g, "Autoescola Expresso 21")
+    .replace(/autoescola renacer/g, "autoescola expresso 21")
+    .replace(/CFC Renacer/g, "CFC Expresso 21")
+    .replace(/cfc renacer/g, "cfc expresso 21")
     .replace(/laudo\s+psicot[eé]cnico/gi, "laudo")
     .replace(/laudo\s+psicol[oó]gico/gi, "laudo")
     .replace(/\bpsicot[eé]cnico\b/gi, "avaliacao psicologica")
     .replace(/\bpsicoteste\b/gi, "avaliacao psicologica")
-    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
-    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
+    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "endereco da unidade cadastrada")
+    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "endereco da unidade cadastrada")
+    .replace(/Rua\s+Jorge\s+Calmom,\s*215[^.\n]*/gi, "endereco da unidade cadastrada")
     .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
-    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+renacer\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados")
+    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+expresso 21\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados")
     .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");
   return removeNeighborhoodPrompt(sanitized);
 }
@@ -436,7 +444,7 @@ function removeNeighborhoodPrompt(text: string) {
 
   if (cleaned.length >= 20) return cleaned;
 
-  return "Todas as aulas iniciam na Auto Escola Renacer, em Catu. Me diga apenas qual turno fica melhor para voce: manha ou tarde?";
+  return "Todas as aulas iniciam na unidade cadastrada da Auto Escola Expresso 21. Me diga apenas qual turno fica melhor para voce: manha ou tarde?";
 }
 
 function buildAllowedComputedTotals(allowedMoney: string[]) {

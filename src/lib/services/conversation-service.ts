@@ -1413,9 +1413,9 @@ function isLikelyBusinessProfileName(name: string) {
     .trim();
 
   const businessNames = [
-    "auto escola renacer",
-    "autoescola renacer",
-    "cfc renacer",
+    "auto escola expresso 21",
+    "autoescola expresso 21",
+    "cfc expresso 21",
     "auto pro ia",
     "auto pro ia crm"
   ];
@@ -1425,7 +1425,7 @@ function isLikelyBusinessProfileName(name: string) {
 
 function isLikelyBusinessAvatarUrl(url: string) {
   const normalized = url.toLowerCase();
-  return normalized.includes("autoescola") || normalized.includes("renacer") || normalized.includes("autopro");
+  return normalized.includes("autoescola") || normalized.includes("expresso 21") || normalized.includes("autopro");
 }
 
 function classifyLeadSignal(text: string): LeadSignal {

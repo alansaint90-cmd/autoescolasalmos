@@ -25,21 +25,33 @@ function normalizeSettings(value: unknown): AiBusinessSettings {
 
 function sanitizeAiBusinessText(text: string) {
   return text
+    .replace(/Auto Escola Renacer/g, "Auto Escola Expresso 21")
+    .replace(/AUTO ESCOLA RENACER/g, "AUTO ESCOLA EXPRESSO 21")
+    .replace(/auto escola renacer/g, "auto escola expresso 21")
+    .replace(/Autoescola Renacer/g, "Autoescola Expresso 21")
+    .replace(/autoescola renacer/g, "autoescola expresso 21")
+    .replace(/CFC Renacer/g, "CFC Expresso 21")
+    .replace(/cfc renacer/g, "cfc expresso 21")
     .replace(/laudo\s+psicot[eé]cnico/gi, "laudo")
     .replace(/laudo\s+psicol[oó]gico/gi, "laudo")
     .replace(/psicot[eé]cnico/gi, "avaliacao psicologica")
     .replace(/psicoteste/gi, "avaliacao psicologica")
     .replace(/n[aã]o\s+e\s+vendido\s+(?:pela|na)\s+CFC/gi, "e vendido na CFC")
-    .replace(/precisa\s+(?:ser\s+)?feito\s+em\s+cl[ií]nicas\s+autorizadas/gi, "e comprado na Auto Escola Renacer")
+    .replace(/precisa\s+(?:ser\s+)?feito\s+em\s+cl[ií]nicas\s+autorizadas/gi, "e comprado na Auto Escola Expresso 21")
     .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
-    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+renacer\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Renacer nao atende PCD no momento, pois nao possui veiculos adaptados")
+    .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+expresso 21\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados")
     .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");
 }
 
 function sanitizeAddress(address: string) {
   return address
-    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215")
-    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "Rua Jorge Calmom, 215");
+    .replace(/Auto Escola Renacer/g, "Auto Escola Expresso 21")
+    .replace(/auto escola renacer/g, "auto escola expresso 21")
+    .replace(/Autoescola Renacer/g, "Autoescola Expresso 21")
+    .replace(/autoescola renacer/g, "autoescola expresso 21")
+    .replace(/R\.?\s*Santa\s+Rita,\s*509/gi, "Endereco da unidade nao cadastrado")
+    .replace(/Rua\s+Santa\s+Rita,\s*509/gi, "Endereco da unidade nao cadastrado")
+    .replace(/Rua\s+Jorge\s+Calmom,\s*215[^.\n]*/gi, "Endereco da unidade nao cadastrado");
 }
 
 export async function getAiBusinessSettings(): Promise<AiBusinessSettings> {

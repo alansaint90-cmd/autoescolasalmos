@@ -121,7 +121,7 @@ export default function ClientesPage() {
               <input
                 value={schoolName}
                 onChange={(event) => setSchoolName(event.target.value)}
-                placeholder="Ex.: Auto Escola Renacer"
+                placeholder="Ex.: Auto Escola Expresso 21"
                 className="h-12 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 text-sm font-bold outline-none transition placeholder:text-slate-500 focus:border-primary/40"
               />
             </label>

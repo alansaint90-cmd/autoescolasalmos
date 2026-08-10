@@ -89,9 +89,9 @@ function isLikelyBusinessProfileName(name: string) {
     .trim();
 
   return [
-    "auto escola renacer",
-    "autoescola renacer",
-    "cfc renacer",
+    "auto escola expresso 21",
+    "autoescola expresso 21",
+    "cfc expresso 21",
     "auto pro ia",
     "auto pro ia crm"
   ].includes(normalized);
