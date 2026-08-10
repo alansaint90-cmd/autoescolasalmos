@@ -132,8 +132,6 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
     && isPaidTrafficEntryMessage(inbound.text)
     && !whatsappAiPaused
     && !hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)
-    && !hasLeadTag(lead.tags, AI_CURRENT_FLOW_TAG)
-    && !hasLeadTag(lead.tags, AI_PAUSED_STUDENT_TAG)
   ) {
     const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
     conversation = gateResult.conversation;
