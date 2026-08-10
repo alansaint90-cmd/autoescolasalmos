@@ -38,8 +38,10 @@ const MANUAL_CONTACT_TAG = "manual_contact";
 const AWAITING_STUDENT_TYPE_TAG = "aguardando_tipo_aluno";
 const AI_CURRENT_FLOW_TAG = "ia_fluxo_primeira_vez";
 const AI_PAUSED_STUDENT_TAG = "ia_pausada_aluno_existente";
+const AI_AD_FLOW_TAG = "ia_fluxo_anuncio";
 const INITIAL_STUDENT_TYPE_WELCOME = "Seja bem vindo ao atendimento da Auto Escola Expresso 21.";
 const INITIAL_STUDENT_TYPE_QUESTION = "Antes de continuar, me conta uma coisa: voce ja e aluno nosso ou e sua primeira vez por aqui?";
+const INITIAL_AD_FLOW_QUESTION = "Me conta uma coisa: voce esta querendo tirar a primeira habilitacao, adicionar alguma categoria ou fazer mudanca para D ou E?";
 
 export async function registerInboundMessage(input: NormalizedInboundMessage) {
   await ensureSystemUser();
@@ -127,32 +129,6 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
 
   const shouldStartAiFlow = isAiEligibleInbound(inbound, lead.origin, conversationState.created);
   const whatsappAiPaused = !inbound.fromMe ? await isWhatsAppAiPaused() : false;
-  if (
-    !qualificationGateHandled
-    && !inbound.fromMe
-    && isPaidTrafficEntryMessage(inbound.text)
-    && !whatsappAiPaused
-    && !hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)
-  ) {
-    const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
-    conversation = gateResult.conversation;
-    qualificationGateHandled = true;
-    leadSignal = { ...leadSignal, pipelineStage: "ia" };
-    await logAiDecision({
-      conversationId: conversation.id,
-      leadId: lead.id,
-      action: "ai_triage_applied",
-      reason: "Gatilho inicial reconhecido em conversa nova ou existente. IA deve perguntar se ja e aluno ou se e primeira vez antes do fluxo comercial.",
-      mode: "ai",
-      metadata: {
-        gate: "student_type",
-        appliedTag: AWAITING_STUDENT_TYPE_TAG,
-        welcomeMessage: INITIAL_STUDENT_TYPE_WELCOME,
-        nextQuestion: INITIAL_STUDENT_TYPE_QUESTION,
-        conversationCreated: conversationState.created
-      }
-    });
-  }
   const shouldReactivateAiFlow = !qualificationGateHandled
     && !inbound.fromMe
     && !conversationState.created
@@ -167,6 +143,7 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
   }
 
   if (shouldReactivateAiFlow) {
+    await updateLeadTags(lead.id, lead.tags, [AI_AD_FLOW_TAG, "intencao_matricula"], [AWAITING_STUDENT_TYPE_TAG, AI_PAUSED_STUDENT_TAG]);
     const [reactivated] = await db
       .update(conversations)
       .set({
@@ -191,34 +168,30 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
         safetyStatus: "ok",
         metadata: {
           sourcePolicy: "paid_entry_message_reactivation",
-          trigger: inbound.text
+          trigger: inbound.text,
+          appliedTags: [AI_AD_FLOW_TAG, "intencao_matricula"]
         }
       });
     }
   }
 
-  if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && !shouldStartAiFlow && conversation.status === "ai") {
-    const manualQueue = await applyInitialManualQueue(
-      conversation.id,
-      lead.id,
-      inbound,
-      {
-        reason: "Conversa fora da politica de entrada paga. IA pausada porque a primeira mensagem nao corresponde ao gatilho do anuncio.",
-        context: "Politica atual: a IA inicia quando a primeira mensagem for um gatilho de interesse do anuncio, como: tenho interesse gostaria de mais informacoes.",
-        logReason: "Conversa em modo automatico foi pausada porque nao possui a frase inicial validada de trafego pago."
-      }
-    );
-    conversation = manualQueue.conversation;
-    leadSignal = { ...leadSignal, pipelineStage: "novo" };
+  if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && !shouldStartAiFlow && conversation.status === "ai" && !whatsappAiPaused) {
+    const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
+    conversation = gateResult.conversation;
+    qualificationGateHandled = true;
+    leadSignal = { ...leadSignal, pipelineStage: "ia" };
     await logAiDecision({
       conversationId: conversation.id,
       leadId: lead.id,
-      action: "ai_mode_skipped",
-      reason: "Mensagem fora da politica de entrada paga. IA nao respondera este lead automaticamente.",
-      mode: "human",
-      safetyStatus: "skipped",
+      action: "ai_triage_applied",
+      reason: "Mensagem inicial sem gatilho de anuncio. IA enviara boas-vindas e perguntara se ja e aluno ou primeira vez.",
+      mode: "ai",
       metadata: {
-        sourcePolicy: "paid_entry_message_only",
+        sourcePolicy: "student_type_gate_for_non_ad_entry",
+        gate: "student_type",
+        appliedTag: AWAITING_STUDENT_TYPE_TAG,
+        welcomeMessage: INITIAL_STUDENT_TYPE_WELCOME,
+        nextQuestion: INITIAL_STUDENT_TYPE_QUESTION,
         marketing: inbound.marketing,
         leadOrigin: lead.origin
       }
@@ -241,20 +214,24 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
   }
 
   if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && shouldStartAiFlow && !whatsappAiPaused) {
-    const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
-    conversation = gateResult.conversation;
+    await updateLeadTags(lead.id, lead.tags, [AI_AD_FLOW_TAG, "intencao_matricula"], [AWAITING_STUDENT_TYPE_TAG, AI_PAUSED_STUDENT_TAG]);
+    conversation = await updateConversationForQualificationGate({
+      conversationId: conversation.id,
+      status: "ai",
+      reason: "Gatilho de anuncio reconhecido. Fluxo comercial automatico liberado.",
+      context: "Fluxo de anuncio: lead solicitou mais informacoes e entrou direto no atendimento comercial da IA."
+    });
     leadSignal = { ...leadSignal, pipelineStage: "ia" };
     await logAiDecision({
       conversationId: conversation.id,
       leadId: lead.id,
       action: "ai_triage_applied",
-      reason: "Gatilho inicial reconhecido. Antes do fluxo comercial, a IA perguntou se o contato ja e aluno ou se e a primeira vez.",
+      reason: "Gatilho de anuncio reconhecido. IA liberada para seguir o fluxo comercial atual.",
       mode: "ai",
       metadata: {
-        gate: "student_type",
-        appliedTag: AWAITING_STUDENT_TYPE_TAG,
-        welcomeMessage: INITIAL_STUDENT_TYPE_WELCOME,
-        nextQuestion: INITIAL_STUDENT_TYPE_QUESTION
+        sourcePolicy: "paid_entry_message_direct_flow",
+        trigger: inbound.text,
+        appliedTags: [AI_AD_FLOW_TAG, "intencao_matricula"]
       }
     });
   } else if (!qualificationGateHandled && !inbound.fromMe && conversationState.created && (!shouldStartAiFlow || whatsappAiPaused)) {
@@ -948,6 +925,87 @@ export async function processBufferedConversation(conversationId: string) {
     return { skipped: false, message: questionAiMessage ?? welcomeAiMessage };
   }
 
+  if (hasLeadTag(lead.tags, AI_AD_FLOW_TAG) && !recentMessages.some((message) => message.role === "ai")) {
+    const firstName = getLeadFirstName(lead.name);
+    const greeting = firstName
+      ? `Oi, ${firstName}! Aqui e a Laura, da Auto Escola Expresso 21.`
+      : "Oi! Aqui e a Laura, da Auto Escola Expresso 21.";
+    const adFlowMessage = sanitizeWhatsAppText(`${greeting}\n\n${INITIAL_AD_FLOW_QUESTION}`);
+
+    console.info("[conversation-service] sending paid ad flow intro message", {
+      conversationId,
+      leadId: lead.id
+    });
+
+    const sendResults = normalizeEvolutionSendResults(await sendWhatsAppText({
+      phone: lead.phone,
+      text: adFlowMessage
+    }));
+
+    const [aiMessage] = await db
+      .insert(messages)
+      .values({
+        conversation_id: conversationId,
+        external_message_id: sendResults[0]?.messageId,
+        role: "ai",
+        content: adFlowMessage,
+        metadata: {
+          source: "auto_pro_ia_ad_flow",
+          flow: "paid_entry_message",
+          triggerTag: AI_AD_FLOW_TAG,
+          bufferedMessageIds: buffered.map((item) => item.messageId),
+          evolutionMessageKeys: sendResults.map((result) => result.key).filter(Boolean)
+        },
+        modified_by: SYSTEM_USER_ID
+      })
+      .returning();
+
+    await logAiDecision({
+      conversationId,
+      leadId: lead.id,
+      messageId: aiMessage?.id,
+      action: "ai_reply_generated",
+      reason: "Lead entrou pelo gatilho de anuncio; enviada primeira pergunta fixa do fluxo comercial.",
+      mode: "ai",
+      safetyStatus: "ok",
+      metadata: {
+        flow: "paid_entry_message",
+        triggerTag: AI_AD_FLOW_TAG,
+        question: INITIAL_AD_FLOW_QUESTION,
+        bufferedMessageIds: buffered.map((item) => item.messageId)
+      }
+    });
+
+    await db
+      .update(conversations)
+      .set({
+        last_message_at: new Date(),
+        context_summary: "Fluxo de anuncio: primeira pergunta comercial enviada pela IA.",
+        updated_at: new Date(),
+        modified_by: SYSTEM_USER_ID
+      })
+      .where(and(eq(conversations.id, conversationId), eq(conversations.is_deleted, false)));
+
+    await publishRealtimeEvent({
+      type: "message.created",
+      conversationId,
+      payload: { message: aiMessage }
+    });
+
+    if (aiMessage) {
+      await appendRecentConversationContext({
+        conversationId,
+        messageId: aiMessage.id,
+        role: aiMessage.role,
+        content: aiMessage.content,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    await scheduleLeadFollowUp(lead.id);
+    return { skipped: false, message: aiMessage };
+  }
+
   if (!isAiAllowedLead(lead.origin, lead.tags)) {
     await clearConversationBuffer(conversationId);
     await db
@@ -1508,6 +1566,16 @@ function isAiAllowedLead(origin?: string | null, tags?: unknown) {
 
 function hasLeadTag(tags: unknown, tag: string) {
   return Array.isArray(tags) && tags.includes(tag);
+}
+
+function getLeadFirstName(name?: string | null) {
+  const cleanName = (name ?? "")
+    .replace(/[^\p{L}\s'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanName || cleanName.length < 2) return "";
+  return cleanName.split(" ")[0] ?? "";
 }
 
 function classifyStudentTypeAnswer(text: string): "first_time" | "existing_student" | "unclear" {
