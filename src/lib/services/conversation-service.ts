@@ -126,6 +126,33 @@ export async function registerInboundMessage(input: NormalizedInboundMessage) {
 
   const shouldStartAiFlow = isAiEligibleInbound(inbound, lead.origin, conversationState.created);
   const whatsappAiPaused = !inbound.fromMe ? await isWhatsAppAiPaused() : false;
+  if (
+    !qualificationGateHandled
+    && !inbound.fromMe
+    && isPaidTrafficEntryMessage(inbound.text)
+    && !whatsappAiPaused
+    && !hasLeadTag(lead.tags, AWAITING_STUDENT_TYPE_TAG)
+    && !hasLeadTag(lead.tags, AI_CURRENT_FLOW_TAG)
+    && !hasLeadTag(lead.tags, AI_PAUSED_STUDENT_TAG)
+  ) {
+    const gateResult = await startStudentTypeGate(conversation.id, lead.id, lead.tags);
+    conversation = gateResult.conversation;
+    qualificationGateHandled = true;
+    leadSignal = { ...leadSignal, pipelineStage: "ia" };
+    await logAiDecision({
+      conversationId: conversation.id,
+      leadId: lead.id,
+      action: "ai_triage_applied",
+      reason: "Gatilho inicial reconhecido em conversa nova ou existente. IA deve perguntar se ja e aluno ou se e primeira vez antes do fluxo comercial.",
+      mode: "ai",
+      metadata: {
+        gate: "student_type",
+        appliedTag: AWAITING_STUDENT_TYPE_TAG,
+        nextQuestion: INITIAL_STUDENT_TYPE_QUESTION,
+        conversationCreated: conversationState.created
+      }
+    });
+  }
   const shouldReactivateAiFlow = !qualificationGateHandled
     && !inbound.fromMe
     && !conversationState.created
