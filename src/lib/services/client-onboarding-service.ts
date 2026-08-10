@@ -182,6 +182,33 @@ export async function updateClient(input: {
   return client;
 }
 
+export async function deleteClientWithOnboarding(clientId: string, modifiedBy: string) {
+  const now = new Date();
+
+  await db
+    .update(clientOnboardings)
+    .set({
+      is_deleted: true,
+      deleted_at: now,
+      updated_at: now,
+      modified_by: modifiedBy
+    })
+    .where(and(eq(clientOnboardings.client_id, clientId), eq(clientOnboardings.is_deleted, false)));
+
+  const [client] = await db
+    .update(clients)
+    .set({
+      is_deleted: true,
+      deleted_at: now,
+      updated_at: now,
+      modified_by: modifiedBy
+    })
+    .where(and(eq(clients.id, clientId), eq(clients.is_deleted, false)))
+    .returning();
+
+  return client;
+}
+
 export async function generateOnboardingLink(clientId: string, modifiedBy: string) {
   const token = randomBytes(32).toString("base64url");
   const tokenHash = hashOnboardingToken(token);

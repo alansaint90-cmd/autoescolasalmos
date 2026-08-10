@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Copy, Download, ExternalLink, FileText, Link2, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Copy, Download, ExternalLink, FileText, Link2, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { Topbar } from "@/components/topbar";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,7 @@ export default function ClientesPage() {
   const [schoolName, setSchoolName] = useState("");
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -109,6 +110,27 @@ export default function ClientesPage() {
     setFeedback("Link copiado.");
   }
 
+  async function deleteOnboarding(client: ClientRecord) {
+    const confirmed = window.confirm(`Apagar o onboarding de ${client.name}?`);
+    if (!confirmed) return;
+
+    setDeletingId(client.id);
+    setFeedback("");
+
+    try {
+      const response = await fetch(`/api/clients/${client.id}`, { method: "DELETE" });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Nao foi possivel apagar onboarding.");
+
+      setClients((items) => items.filter((item) => item.id !== client.id));
+      setFeedback(`Onboarding de ${client.name} apagado.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Nao foi possivel apagar onboarding.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <Topbar title="Onboard Cliente" subtitle="Gere links de onboarding e receba PDFs para base de conhecimento." />
@@ -151,13 +173,14 @@ export default function ClientesPage() {
         </section>
 
         <section className="mt-4 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070c14]/90">
-          <div className="grid min-w-[980px] grid-cols-[1.2fr_180px_1.5fr_180px_120px_120px] gap-3 border-b border-white/[0.08] px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+          <div className="grid min-w-[1040px] grid-cols-[1.2fr_180px_1.5fr_180px_120px_120px_60px] gap-3 border-b border-white/[0.08] px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
             <span>Nome da Autoescola</span>
             <span>Status</span>
             <span>Link do formulário</span>
             <span>Data de envio</span>
             <span>Visualizar PDF</span>
             <span>Baixar PDF</span>
+            <span>Acoes</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -166,13 +189,13 @@ export default function ClientesPage() {
             ) : clients.length === 0 ? (
               <div className="p-5 text-sm text-muted-foreground">Nenhum link de onboarding gerado ainda.</div>
             ) : (
-              <div className="min-w-[980px] divide-y divide-white/[0.06]">
+              <div className="min-w-[1040px] divide-y divide-white/[0.06]">
                 {clients.map((client) => {
                   const status = client.onboarding?.status ?? client.onboarding_status;
                   const link = client.onboarding?.public_url;
                   const completed = status === "completed";
                   return (
-                    <div key={client.id} className="grid grid-cols-[1.2fr_180px_1.5fr_180px_120px_120px] items-center gap-3 px-4 py-3">
+                    <div key={client.id} className="grid grid-cols-[1.2fr_180px_1.5fr_180px_120px_120px_60px] items-center gap-3 px-4 py-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black">{client.name}</p>
                       </div>
@@ -224,6 +247,16 @@ export default function ClientesPage() {
                       ) : (
                         <DisabledPdfButton label="Baixar" />
                       )}
+                      <button
+                        type="button"
+                        onClick={() => void deleteOnboarding(client)}
+                        disabled={deletingId === client.id}
+                        className="grid size-9 place-items-center rounded-lg border border-red-300/15 bg-red-500/10 text-red-200 transition hover:border-red-300/35 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label={`Apagar onboarding de ${client.name}`}
+                        title="Apagar"
+                      >
+                        {deletingId === client.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      </button>
                     </div>
                   );
                 })}
