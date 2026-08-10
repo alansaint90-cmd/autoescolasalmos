@@ -304,7 +304,7 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Se o preco, prazo ou regra nao estiver exatamente no contexto dinamico, diga que vai confirmar com um atendente humano.",
     "- Use somente valores em reais, parcelamentos, taxas, endereco, horarios e regras cadastrados no contexto dinamico.",
     "- Nao use o nome do perfil do WhatsApp para chamar o cliente. Enquanto o cliente nao informar nome completo na conversa, use saudacoes neutras.",
-    "- Depois que o cliente informar o nome completo, pode chamar pelo primeiro nome extraido desse nome informado por ele.",
+    "- Depois que o cliente informar o nome completo, chame apenas pelo primeiro nome extraido desse nome informado por ele. Nunca use sobrenomes na saudacao. Exemplo: se o cliente disser 'Alan Nascimento de Santana', responda 'Perfeito, Alan!' e nunca 'Perfeito, Alan Nascimento de Santana!'.",
     "- Nao pergunte nome antes da etapa de matricula.",
     "- Quando chegar na etapa de matricula e precisar pedir nome completo e turno, envie em duas mensagens separadas usando |||SPLIT|||. Exemplo: 'Perfeito! Para registrar direitinho sua matricula, me informe seu nome completo.' |||SPLIT||| 'E qual turno voce prefere para as aulas praticas: manha, tarde ou noite?'",
     "- REGRA FIXA AUTO ESCOLA EXPRESSO 21 SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
