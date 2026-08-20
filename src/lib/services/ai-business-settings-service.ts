@@ -9,18 +9,46 @@ import { appSettings } from "@/lib/db/schema";
 
 function normalizeSettings(value: unknown): AiBusinessSettings {
   const partial = typeof value === "object" && value !== null ? (value as Partial<AiBusinessSettings>) : {};
+  const prices = sanitizeAiBusinessText(partial.prices?.trim() || defaultAiBusinessSettings.prices);
+  const address = sanitizeAddress(partial.address?.trim() || defaultAiBusinessSettings.address);
+  const hours = partial.hours?.trim() || defaultAiBusinessSettings.hours;
+  const customPrompt = sanitizeAiBusinessText(partial.customPrompt?.trim() || defaultAiBusinessSettings.customPrompt);
 
   return {
     agentName: partial.agentName?.trim() || defaultAiBusinessSettings.agentName,
-    prices: sanitizeAiBusinessText(partial.prices?.trim() || defaultAiBusinessSettings.prices),
-    address: sanitizeAddress(partial.address?.trim() || defaultAiBusinessSettings.address),
-    hours: partial.hours?.trim() || defaultAiBusinessSettings.hours,
-    customPrompt: sanitizeAiBusinessText(partial.customPrompt?.trim() || defaultAiBusinessSettings.customPrompt),
+    prices: shouldUseDefaultExpresso21Base(prices) ? defaultAiBusinessSettings.prices : prices,
+    address: shouldUseDefaultExpresso21Address(address) ? defaultAiBusinessSettings.address : address,
+    hours: shouldUseDefaultExpresso21Hours(hours) ? defaultAiBusinessSettings.hours : hours,
+    customPrompt: shouldUseDefaultExpresso21Base(customPrompt) ? defaultAiBusinessSettings.customPrompt : customPrompt,
     triagePrompt: sanitizeAiBusinessText(partial.triagePrompt?.trim() || defaultAiBusinessSettings.triagePrompt),
     sdrPrompt: sanitizeAiBusinessText(partial.sdrPrompt?.trim() || defaultAiBusinessSettings.sdrPrompt),
     orchestratorPrompt: sanitizeAiBusinessText(partial.orchestratorPrompt?.trim() || defaultAiBusinessSettings.orchestratorPrompt),
     supervisorPrompt: sanitizeAiBusinessText(partial.supervisorPrompt?.trim() || defaultAiBusinessSettings.supervisorPrompt)
   };
+}
+
+function shouldUseDefaultExpresso21Base(text: string) {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("cnh do brasil")
+    || normalized.includes("r$ 1.280,00")
+    || normalized.includes("taxa de matricula e r$ 120,00")
+    || normalized.includes("exame pratico sai por r$ 165,00")
+  );
+}
+
+function shouldUseDefaultExpresso21Address(address: string) {
+  const normalized = address.toLowerCase();
+  return (
+    normalized.includes("endereco da unidade nao cadastrado")
+    || normalized.includes("jorge calmom")
+    || normalized.includes("santa rita")
+  );
+}
+
+function shouldUseDefaultExpresso21Hours(hours: string) {
+  const normalized = hours.toLowerCase();
+  return normalized.includes("18h30") || normalized.includes("sabados");
 }
 
 function sanitizeAiBusinessText(text: string) {
@@ -36,8 +64,6 @@ function sanitizeAiBusinessText(text: string) {
     .replace(/laudo\s+psicol[oó]gico/gi, "laudo")
     .replace(/psicot[eé]cnico/gi, "avaliacao psicologica")
     .replace(/psicoteste/gi, "avaliacao psicologica")
-    .replace(/n[aã]o\s+e\s+vendido\s+(?:pela|na)\s+CFC/gi, "e vendido na CFC")
-    .replace(/precisa\s+(?:ser\s+)?feito\s+em\s+cl[ií]nicas\s+autorizadas/gi, "e comprado na Auto Escola Expresso 21")
     .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
     .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+expresso 21\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados")
     .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");

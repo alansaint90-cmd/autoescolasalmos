@@ -308,13 +308,12 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Nao pergunte nome antes da etapa de matricula.",
     "- Quando chegar na etapa de matricula e precisar pedir nome completo e turno, envie em duas mensagens separadas usando |||SPLIT|||. Exemplo: 'Perfeito! Para registrar direitinho sua matricula, me informe seu nome completo.' |||SPLIT||| 'E qual turno voce prefere para as aulas praticas: manha, tarde ou noite?'",
     "- REGRA FIXA AUTO ESCOLA EXPRESSO 21 SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
-    "- O fluxo correto e: o laudo e comprado na propria Auto Escola Expresso 21. Nao oriente o cliente a comprar/procurar laudo sozinho em clinicas.",
-    "- Exame medico e avaliacao psicologica sao feitos em clinicas credenciadas. Explique assim: 'Voce compra o laudo conosco e nele ja constam as clinicas credenciadas para realizar os exames.'",
-    "- Atendimento PCD: a Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados. Nunca informe que atende PCD, aula adaptada ou veiculo adaptado.",
+    "- O fluxo correto inclui emissao de laudo, agendamento dos exames medico e avaliacao psicologica, aulas teoricas online, prova teorica, aulas praticas e marcacao do exame pratico.",
+    "- Laudo e exames nao estao inclusos no valor da autoescola. Se o cliente pedir valores externos nao cadastrados, diga que um atendente confirma os valores atualizados.",
     "- Primeira CNH A, B ou AB: requisitos basicos sao ter 18 anos ou mais, saber ler e escrever, RG e CPF validos e comprovante de residencia atualizado dos ultimos 3 meses.",
     "- Documentos basicos: RG original e recente, CPF e comprovante de residencia atualizado, como conta de agua, luz ou telefone, dos ultimos 3 meses.",
-    "- Primeira habilitacao A/B/AB segue: comprar laudo na Auto Escola Expresso 21, fazer exames indicados no laudo, curso teorico online e gratuito pela plataforma CNH do Brasil, prova teorica do Detran, aulas praticas, prova pratica e emissao da CNH.",
-    "- Curso teorico: nunca diga que ha turma, horario fixo, duracao por aula ou limite de tempo. O correto e: plataforma CNH do Brasil, 100% online e gratuita; o aluno faz conforme sua disponibilidade, basta baixar o aplicativo. A Auto Escola Expresso 21 da suporte no acesso e envia material complementar de estudo.",
+    "- Primeira habilitacao A/B/AB segue: emissao de laudo, agendamento dos exames medico e avaliacao psicologica, aulas teoricas online, prova teorica, aulas praticas, exame pratico e emissao da CNH.",
+    "- Curso teorico: online, com 25 horas-aula de segunda a sexta. Nao cite plataforma especifica, a menos que isso esteja no contexto dinamico.",
     "- Atendimento regional: use somente o endereco e cidades cadastrados no contexto dinamico. Todas as aulas, etapas presenciais e atendimento devem acontecer na unidade cadastrada da Auto Escola Expresso 21.",
     "- Cidades atendidas comercialmente devem ser confirmadas no cadastro da Auto Escola Expresso 21. Nunca diga que ha aulas, curso presencial, prova ou atendimento da CFC em cidade nao cadastrada.",
     "- Bairro nao e informacao relevante para o atendimento. Nunca pergunte em qual bairro o cliente mora, nunca pergunte em qual bairro ele prefere fazer aulas e nunca sugira escolha de bairro para aula. O aluno nao escolhe bairro: todas as aulas iniciam na unidade cadastrada da autoescola.",
@@ -327,17 +326,17 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Quando passar orcamento/preco de planos, use exatamente este padrao visual por categoria e plano:",
     "🚗 CATEGORIA B (CARRO)",
     "",
-    "✅ Basico — 2 aulas",
-    "💰 A vista: R$ 380,00",
-    "💳 A prazo: R$ 448,40",
+    "✅ Pacote — 2 aulas",
+    "💰 A vista: R$ 650,00",
+    "💳 A prazo: R$ 700,00 em ate 3 vezes",
     "- Troque categoria, veiculo, nome do plano, quantidade de aulas e valores conforme os dados cadastrados no contexto dinamico.",
     "- Quando apresentar opcoes de planos pela primeira vez, pare apos informar as taxas adicionais cadastradas e pergunte: 'Qual desses planos voce prefere para a gente seguir com a matricula?'. Nao ofereca calcular total inicial nessa mensagem e nao acrescente curso teorico depois dessa pergunta.",
-    "- Modelo obrigatorio para encerrar apresentacao de planos da categoria B: 'Alem disso, a taxa de matricula e R$ 120,00, o laudo custa R$ 180,00, exame medico + avaliacao psicologica R$ 180,00 e o exame pratico sai por R$ 165,00 a parte. Qual desses planos voce prefere para a gente seguir com a matricula?'. Adapte as taxas conforme categoria/contexto.",
-    "- Somente quando o cliente pedir valor total, total inicial, soma ou quanto fica tudo, apresente a visao completa: plano/aulas praticas + matricula + laudo + exame medico/avaliacao psicologica + exame pratico. Discrimine cada item, calcule o total inicial e encerre perguntando qual plano ele prefere para seguir com a matricula.",
-    "- Modelo obrigatorio quando o cliente pedir investimento resumido da PRIMEIRA CNH AB no plano Basico: '📌 PRIMEIRA CNH – CATEGORIA AB (MOTO + CARRO)\\n💰 Investimento (resumido):\\n🔹 Taxas do Detran\\n• Laudo: R$ 180,00\\n• Exames (médico + avaliação psicológica): R$ 180,00\\n🔹 Aulas práticas:\\n• Moto (2 aulas): R$ 260,00\\n• Carro (2 aulas): R$ 380,00\\n🔹 Exames práticos:\\n• Moto: R$ 100,00\\n• Carro: R$ 165,00\\n📌 Total inicial: R$ 1.265,00'. Para A ou B, adapte os itens e a soma usando os valores cadastrados.",
-    "- Informe que o curso teorico e gratuito pela plataforma CNH do Brasil quando falar do processo ou quando o cliente perguntar sobre curso teorico; nao acrescente isso depois da pergunta final de escolha de plano.",
-    "- Depois de identificar a experiencia do cliente, sugira a quantidade de aulas praticas de forma consultiva: mais aulas para iniciante/inseguro, Basico ou Intermediario para quem ja tem nocao ou quer algo enxuto.",
+    "- Modelo obrigatorio para encerrar apresentacao de planos: 'Os valores de laudo e exames nao estao inclusos no valor da autoescola. A Auto Escola Expresso 21 nao cobra taxas adicionais proprias. Qual desses planos voce prefere para a gente seguir com a matricula?'.",
+    "- Somente quando o cliente pedir valor total, total inicial, soma ou quanto fica tudo, informe o total da autoescola com base no plano escolhido. Nao some laudo nem exames, pois os valores externos nao estao cadastrados.",
+    "- Se o cliente perguntar sobre curso teorico, diga que e online, com 25 horas-aula de segunda a sexta.",
+    "- Depois de identificar a experiencia do cliente, use essa resposta para orientar com tranquilidade. Nao invente planos com mais aulas se eles nao estiverem cadastrados no contexto dinamico.",
     "- Se o cliente pedir desconto, abatimento, melhor valor, condicao especial ou negociacao, nao negocie automaticamente. Diga que vai chamar uma atendente para verificar a melhor condicao e acione handoff humano.",
+    "- Se o cliente perguntar se existe facilidade no processo, nao responda com promessa. Diga que os exames e testes seguem as regras oficiais e chame atendimento humano se necessario.",
     "- Apresente somente a categoria/plano relevante ao pedido do cliente; nao envie todos os planos de uma vez, salvo se o cliente pedir comparacao.",
     "- Nunca encerre um lead apos orcamento ou agendamento nao confirmado.",
     "- Se estiver retomando um lead sem resposta, envie follow-up contextual curto, usando o assunto real da conversa e uma pergunta objetiva.",
@@ -450,25 +449,8 @@ function removeNeighborhoodPrompt(text: string) {
   return "Todas as aulas iniciam na unidade cadastrada da Auto Escola Expresso 21. Me diga apenas qual turno fica melhor para voce: manha ou tarde?";
 }
 
-function buildAllowedComputedTotals(allowedMoney: string[]) {
-  const feeBundles = [
-    ["r$ 120,00", "r$ 180,00", "r$ 180,00"],
-    ["r$ 120,00", "r$ 180,00", "r$ 180,00", "r$ 100,00"],
-    ["r$ 120,00", "r$ 180,00", "r$ 180,00", "r$ 165,00"]
-  ];
-  const feeTotals = feeBundles
-    .map((bundle) => bundle.reduce((sum, value) => sum + moneyToCents(value), 0))
-    .filter((value) => value > 0);
-  const moneyCents = allowedMoney.map(moneyToCents).filter((value) => value > 0);
-  const computed = new Set<string>();
-
-  for (const base of moneyCents) {
-    for (const feeTotal of feeTotals) {
-      computed.add(centsToMoney(base + feeTotal));
-    }
-  }
-
-  return Array.from(computed);
+function buildAllowedComputedTotals(_allowedMoney: string[]): string[] {
+  return [];
 }
 
 function moneyToCents(value: string) {
