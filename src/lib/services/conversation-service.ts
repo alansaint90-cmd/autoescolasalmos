@@ -1609,17 +1609,18 @@ function classifyStudentTypeAnswer(text: string): "first_time" | "existing_stude
   const includesAny = (patterns: string[]) => patterns.some((pattern) => normalized.includes(pattern));
 
   if (includesAny([
-    "primeira vez",
-    "primeira habilitacao",
-    "primeira cnh",
     "nunca fui aluno",
+    "nunca fui aluna",
+    "ainda nao sou aluno",
+    "ainda nao sou aluna",
     "nao sou aluno",
     "nao sou aluna",
-    "novo aluno",
-    "nova aluna",
-    "quero ser aluno",
-    "quero me matricular",
-    "quero fazer matricula"
+    "nao sou matriculado",
+    "nao sou matriculada",
+    "nao me matriculei",
+    "ainda nao me matriculei",
+    "nao tenho matricula",
+    "nunca me matriculei"
   ])) {
     return "first_time";
   }
@@ -1627,17 +1628,34 @@ function classifyStudentTypeAnswer(text: string): "first_time" | "existing_stude
   if (includesAny([
     "ja sou aluno",
     "ja sou aluna",
+    "ja era aluno",
+    "ja era aluna",
     "sou aluno",
     "sou aluna",
+    "sou aluno de voces",
+    "sou aluna de voces",
     "ja estudo",
+    "estudo ai",
+    "estudo com voces",
     "estou matriculado",
     "estou matriculada",
+    "to matriculado",
+    "to matriculada",
     "sou matriculado",
     "sou matriculada",
+    "ja me matriculei",
+    "me matriculei",
+    "fiz matricula",
     "ja tenho cadastro",
     "ja fiz matricula",
+    "minha matricula",
     "ja estou fazendo",
+    "estou fazendo",
+    "to fazendo",
     "ja comecei",
+    "comecei o processo",
+    "ja iniciei",
+    "iniciei o processo",
     "segunda via",
     "remarcar aula",
     "marcar aula",
@@ -1646,6 +1664,30 @@ function classifyStudentTypeAnswer(text: string): "first_time" | "existing_stude
     "minhas aulas"
   ])) {
     return "existing_student";
+  }
+
+  if (includesAny([
+    "primeira vez",
+    "e a primeira",
+    "eh a primeira",
+    "a primeira",
+    "minha primeira",
+    "primeira habilitacao",
+    "primeira cnh",
+    "primeira carteira",
+    "primeira permissao",
+    "novo aluno",
+    "nova aluna",
+    "sou novo",
+    "sou nova",
+    "quero ser aluno",
+    "quero ser aluna",
+    "quero me matricular",
+    "quero fazer matricula",
+    "quero comecar",
+    "quero iniciar"
+  ])) {
+    return "first_time";
   }
 
   if (normalized === "nao" || normalized === "n") return "first_time";
