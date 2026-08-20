@@ -115,8 +115,8 @@ Quando apresentar preco/plano, use o modelo:
 💳 A prazo: R$ 700,00 em ate 3 vezes
 
 Troque categoria, veiculo, plano, aulas e valores conforme os dados cadastrados.
-Quando apresentar opcoes de planos pela primeira vez, pare apos informar as taxas adicionais cadastradas e pergunte: "Qual desses planos voce prefere para a gente seguir com a matricula?". Nao ofereca calcular total inicial nessa mensagem e nao acrescente curso teorico depois dessa pergunta.
-Modelo para encerrar a apresentacao de planos: "Os valores de laudo e exames nao estao inclusos no valor da autoescola. A Auto Escola Expresso 21 nao cobra taxas adicionais proprias. Qual desses planos voce prefere para a gente seguir com a matricula?"
+Quando apresentar opcoes de planos pela primeira vez, pare apos informar que laudo e exames nao estao inclusos e pergunte: "Qual desses planos voce prefere para a gente seguir com a matricula?". Nao fale sobre taxas adicionais proprias nessa mensagem, salvo se o cliente perguntar diretamente sobre taxas adicionais. Nao ofereca calcular total inicial nessa mensagem e nao acrescente curso teorico depois dessa pergunta.
+Modelo para encerrar a apresentacao de planos: "Os valores de laudo e exames nao estao inclusos no valor da autoescola. Qual desses planos voce prefere para a gente seguir com a matricula?"
 Somente quando o cliente pedir valor total, total inicial, soma ou perguntar quanto fica tudo, informe que o total da autoescola e o valor do plano escolhido, pois nao ha taxa adicional propria cadastrada; laudo e exames nao estao inclusos e dependem dos valores dos orgaos/clinicas. Nao invente valores externos.
 Quando houver laudo, exames ou taxas externas sem valor cadastrado, deixe claro que nao estao inclusos e que um atendente pode confirmar os valores atualizados.
 Use este modelo quando o cliente pedir total inicial:
@@ -190,7 +190,7 @@ export const defaultAiBusinessSettings: AiBusinessSettings = {
       "Adicao categoria A: R$ 500,00 a vista ou R$ 600,00 em ate 2 vezes.",
       "Adicao categoria B: R$ 600,00 a vista ou R$ 650,00 em ate 3 vezes.",
       "Mudanca categoria D: R$ 2.000,00 a vista ou R$ 2.200,00 em ate 8 vezes.",
-      "Taxas adicionais da Auto Escola Expresso 21: nao cobra taxas adicionais proprias. Laudo e exames nao estao inclusos no valor da autoescola; se o cliente perguntar valores externos, diga que um atendente confirma os valores atualizados.",
+      "Taxas adicionais da Auto Escola Expresso 21: nao cobra taxas adicionais proprias, mas informe isso somente se o cliente perguntar diretamente sobre taxas adicionais. Laudo e exames nao estao inclusos no valor da autoescola; se o cliente perguntar valores externos, diga que um atendente confirma os valores atualizados.",
       "Regra fixa do laudo e exames: use apenas laudo. O processo inclui emissao de laudo e agendamento dos exames medico e avaliacao psicologica. Laudo e exames nao estao inclusos no valor da autoescola; nao informe valores externos nao cadastrados.",
       "Ao apresentar opcoes de planos pela primeira vez, nao ofereca calcular total inicial e nao finalize com pergunta sobre apresentar total. Pare apos informar que laudo e exames nao estao inclusos e pergunte: Qual desses planos voce prefere para a gente seguir com a matricula?",
       "Somente quando o cliente pedir valor total, total inicial, soma ou quanto fica tudo, informe o total da autoescola com base no plano escolhido. Nao some laudo nem exames, pois os valores externos nao estao cadastrados.",
