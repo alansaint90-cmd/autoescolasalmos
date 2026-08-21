@@ -308,13 +308,13 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "- Nao pergunte nome antes da etapa de matricula.",
     "- Quando chegar na etapa de matricula e precisar pedir nome completo e turno, envie em duas mensagens separadas usando |||SPLIT|||. Exemplo: 'Perfeito! Para registrar direitinho sua matricula, me informe seu nome completo.' |||SPLIT||| 'E qual turno voce prefere para as aulas praticas: manha, tarde ou noite?'",
     "- REGRA FIXA AUTO ESCOLA EXPRESSO 21 SOBRE LAUDO: use somente 'laudo'. E proibido escrever 'laudo psicotecnico', 'laudo psicologico' ou 'psicoteste' como nome do laudo.",
-    "- O fluxo correto inclui comprar o laudo na propria autoescola, fazer o exame medico/avaliacao psicologica, aulas teoricas online, prova teorica, aulas praticas e marcacao do exame pratico.",
-    "- Para dar inicio no processo, alem do plano, tem o laudo, que compra la na propria autoescola, e o exame medico/avaliacao psicologica.",
+    "- O fluxo correto inclui comprar o laudo na propria autoescola, fazer o exame medico/psicoteste, aulas teoricas online, prova teorica, aulas praticas e marcacao do exame pratico.",
+    "- Para dar inicio no processo, alem do plano, tem o laudo, que compra la na propria autoescola, e o exame medico/psicoteste.",
     "- Valores do laudo conforme qualificacao: primeira habilitacao R$ 180,00; adicao de categoria R$ 219,98; mudanca de categoria R$ 262,47. Mostre o valor correto de acordo com a qualificacao do cliente. Nao use outro valor de laudo.",
-    "- O exame medico/avaliacao psicologica faz parte do inicio do processo, mas nao tem valor cadastrado. Nao invente esse valor; se o cliente perguntar, diga que um atendente confirma o valor atualizado.",
+    "- Exame medico/psicoteste: R$ 180,00. Exame toxicologico: R$ 140,00 para mudanca de categoria.",
     "- Primeira CNH A, B ou AB: requisitos basicos sao ter 18 anos ou mais, saber ler e escrever, RG e CPF validos e comprovante de residencia atualizado dos ultimos 3 meses.",
     "- Documentos basicos: RG original e recente, CPF e comprovante de residencia atualizado, como conta de agua, luz ou telefone, dos ultimos 3 meses.",
-    "- Primeira habilitacao A/B/AB segue: comprar o laudo na propria autoescola, fazer o exame medico/avaliacao psicologica, aulas teoricas online, prova teorica, aulas praticas, exame pratico e emissao da CNH.",
+    "- Primeira habilitacao A/B/AB segue: comprar o laudo na propria autoescola, fazer o exame medico/psicoteste, aulas teoricas online, prova teorica, aulas praticas, exame pratico e emissao da CNH.",
     "- Curso teorico: online, com 25 horas-aula de segunda a sexta. Nao cite plataforma especifica, a menos que isso esteja no contexto dinamico.",
     "- Atendimento regional: use somente o endereco e cidades cadastrados no contexto dinamico. Todas as aulas, etapas presenciais e atendimento devem acontecer na unidade cadastrada da Auto Escola Expresso 21.",
     "- Cidades atendidas comercialmente devem ser confirmadas no cadastro da Auto Escola Expresso 21. Nunca diga que ha aulas, curso presencial, prova ou atendimento da CFC em cidade nao cadastrada.",
@@ -336,9 +336,9 @@ function buildSystemPrompt(settings: BusinessSettings) {
     "💰 A vista: R$ 650,00",
     "💳 A prazo: R$ 700,00 em ate 3 vezes",
     "- Troque categoria, veiculo, nome do plano, quantidade de aulas e valores conforme os dados cadastrados no contexto dinamico.",
-    "- Quando apresentar opcoes de planos pela primeira vez, pare apos informar que para iniciar, alem do plano, tem o laudo que compra la na propria autoescola e o exame medico/avaliacao psicologica. Informe o valor do laudo conforme a qualificacao do cliente e pergunte: 'Qual desses planos voce prefere para a gente seguir com a matricula?'. Nao fale sobre taxas adicionais proprias nessa mensagem, salvo se o cliente perguntar diretamente sobre taxas adicionais. Nao ofereca calcular total inicial nessa mensagem e nao acrescente curso teorico depois dessa pergunta.",
-    "- Modelo obrigatorio para encerrar apresentacao de planos de primeira habilitacao: 'Para dar inicio no processo, alem do plano, tem o laudo, que compra la na propria autoescola, e o exame medico/avaliacao psicologica. Para primeira habilitacao, o laudo fica R$ 180,00. Qual desses planos voce prefere para a gente seguir com a matricula?'. Adapte para adicao ou mudanca usando o valor correto do laudo.",
-    "- Somente quando o cliente pedir valor total, total inicial, soma ou quanto fica tudo, informe o total da autoescola com base no plano escolhido + o laudo correto conforme a qualificacao. Nao some exame medico/avaliacao psicologica, pois nao ha valor cadastrado.",
+    "- Quando apresentar opcoes de planos pela primeira vez, depois dos valores envie em duas mensagens separadas usando |||SPLIT|||: primeiro informe que para iniciar, alem do plano, tem o laudo que compra la na propria autoescola e o exame medico/avaliacao psicologica; informe o valor do laudo conforme a qualificacao do cliente e exame medico/psicoteste R$ 180,00. Depois pergunte em mensagem separada: 'Qual desses planos voce prefere para a gente seguir com a matricula?'. Nao fale sobre taxas adicionais proprias nessa mensagem, salvo se o cliente perguntar diretamente sobre taxas adicionais. Nao ofereca calcular total inicial nessa mensagem e nao acrescente curso teorico depois dessa pergunta.",
+    "- Modelo obrigatorio para encerrar apresentacao de planos de primeira habilitacao: 'Para dar inicio no processo, alem do plano, tem o laudo, que voce compra aqui na propria autoescola, e o exame medico/avaliacao psicologica. Para primeira habilitacao, o laudo fica R$ 180,00.|||SPLIT|||Qual desses planos voce prefere para a gente seguir com a matricula?'. Adapte para adicao ou mudanca usando o valor correto do laudo; para mudanca, inclua tambem exame toxicologico R$ 140,00.",
+    "- Somente quando o cliente pedir valor total, total inicial, soma ou quanto fica tudo, informe o total com base no plano escolhido + o laudo correto conforme a qualificacao + exame medico/psicoteste R$ 180,00. Para mudanca de categoria, inclua tambem exame toxicologico R$ 140,00.",
     "- Se o cliente perguntar sobre curso teorico, diga que e online, com 25 horas-aula de segunda a sexta.",
     "- Depois de identificar a experiencia do cliente, use essa resposta para orientar com tranquilidade. Nao invente planos com mais aulas se eles nao estiverem cadastrados no contexto dinamico.",
     "- Se o cliente pedir desconto, abatimento, melhor valor, condicao especial ou negociacao, nao negocie automaticamente. Diga que vai chamar uma atendente para verificar a melhor condicao e acione handoff humano.",
@@ -459,12 +459,16 @@ function buildAllowedComputedTotals(allowedMoney: string[]): string[] {
   const laudoValues = ["r$ 180,00", "r$ 219,98", "r$ 262,47"]
     .map(moneyToCents)
     .filter((value) => value > 0);
+  const exameMedico = moneyToCents("r$ 180,00");
+  const toxicologico = moneyToCents("r$ 140,00");
   const moneyCents = allowedMoney.map(moneyToCents).filter((value) => value > 0);
   const computed = new Set<string>();
 
   for (const base of moneyCents) {
     for (const laudo of laudoValues) {
       computed.add(centsToMoney(base + laudo));
+      computed.add(centsToMoney(base + laudo + exameMedico));
+      computed.add(centsToMoney(base + laudo + exameMedico + toxicologico));
     }
   }
 
