@@ -437,7 +437,7 @@ function sanitizeAiOutput(text: string) {
     .replace(/\batendemos\s+(?:clientes\s+)?pcd[^.\n]*/gi, "nao atendemos PCD no momento, pois nao possuimos veiculos adaptados")
     .replace(/(?:a\s+)?(?:auto\s*escola|cfc)\s+expresso 21\s+atende\s+(?:clientes\s+)?pcd[^.\n]*/gi, "A Auto Escola Expresso 21 nao atende PCD no momento, pois nao possui veiculos adaptados")
     .replace(/(?<!n[aã]o\s)(?:possui|tem|oferece)\s+ve[ií]culos?\s+adaptados?/gi, "nao possui veiculos adaptados");
-  return removeNeighborhoodPrompt(sanitized);
+  return enforceInstallmentSplit(removeNeighborhoodPrompt(sanitized));
 }
 
 function removeNeighborhoodPrompt(text: string) {
@@ -453,6 +453,13 @@ function removeNeighborhoodPrompt(text: string) {
   if (cleaned.length >= 20) return cleaned;
 
   return "Todas as aulas iniciam na unidade cadastrada da Auto Escola Expresso 21. Me diga apenas qual turno fica melhor para voce: manha ou tarde?";
+}
+
+function enforceInstallmentSplit(text: string) {
+  if (/\|{3}\s*SPLIT\s*\|{3}/i.test(text)) return text;
+  if (!/exame\s+m[eé]dico\/avalia[cç][aã]o\s+psicol[oó]gica/i.test(text)) return text;
+
+  return text.replace(/(\s+)(Dividimos\s+em\s+at[eé]\s+\d+\s+vezes\s+no\s+cart[aã]o\.)/i, "|||SPLIT|||$2");
 }
 
 function buildAllowedComputedTotals(allowedMoney: string[]): string[] {
